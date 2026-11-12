@@ -19,6 +19,7 @@ from octop_harness.media.providers.dashscope import DashScopeMediaProvider
 from octop_harness.media.providers.volcengine import VolcengineMediaProvider
 
 from octop.infra.agents.media_fork import IMAGE_ONLY_MEDIA_PROVIDERS
+from octop.infra.agents.media_fork.ark_plan import ArkAgentPlanMediaProvider
 from octop.infra.agents.settings.media_generation import (
     MEDIA_PROVIDER_PRESETS,
     MediaGenerationSettingsStore,
@@ -63,7 +64,7 @@ def _update(provider: str) -> MediaProviderUpdate:
     [
         (
             "volcengine-agent-plan",
-            VolcengineMediaProvider,
+            ArkAgentPlanMediaProvider,
             "https://ark.cn-beijing.volces.com/api/plan/v3",
             "doubao-seedream-5-0-pro",
             "doubao-seedance-2.0-fast",
@@ -166,6 +167,7 @@ async def test_agent_plan_calls_plan_endpoints() -> None:
     assert image_path == "/api/plan/v3/images/generations"
     assert image_body["model"] == "doubao-seedream-5-0-pro"
     assert image_body["size"] == "2K"
+    assert "sequential_image_generation" not in image_body
     assert video_path == "/api/plan/v3/contents/generations/tasks"
     assert video_body["model"] == "doubao-seedance-2.0-fast"
 
@@ -203,3 +205,60 @@ async def test_token_plan_calls_plan_host() -> None:
     assert video_body["model"] == "happyhorse-1.1-t2v"
     assert video_body["input"] == {"prompt": "cat runs"}
     assert video_body["parameters"]["resolution"] == "720P"
+
+
+@pytest.mark.parametrize(
+    ("model", "size", "count", "expected_size", "expected_sequential"),
+    [
+        ("doubao-seedream-5.0-flash", None, 1, "2K", None),
+        ("doubao-seedream-5.0-flash", "1024x1024", 1, "2K", None),
+        ("doubao-seedream-5.0-flash", "2048x2048", 1, "2048x2048", None),
+        ("doubao-seedream-5.0-flash", None, 2, "2K", "auto"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_agent_plan_image_body_fits_plan_endpoint(
+    model: str,
+    size: str | None,
+    count: int,
+    expected_size: str,
+    expected_sequential: str | None,
+) -> None:
+    bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"data": [{"b64_json": _B64}] * count})
+
+    config = MediaProviderConfig(
+        id="ap",
+        provider="volcengine-agent-plan",  # type: ignore[arg-type]
+        api_key="k",
+        image_model=model,
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        adapter = create_media_provider(config, client=client)
+        await adapter.generate_image(ImageGenerationRequest(prompt="cat", size=size, count=count))
+
+    (body,) = bodies
+    assert body["size"] == expected_size
+    assert body.get("sequential_image_generation") == expected_sequential
+    if count > 1:
+        assert body["sequential_image_generation_options"] == {"max_images": count}
+
+
+@pytest.mark.asyncio
+async def test_standard_volcengine_body_unchanged() -> None:
+    bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"data": [{"b64_json": _B64}]})
+
+    config = MediaProviderConfig(id="v", provider="volcengine", api_key="k")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        adapter = create_media_provider(config, client=client)
+        assert type(adapter) is VolcengineMediaProvider
+        await adapter.generate_image(ImageGenerationRequest(prompt="cat"))
+
+    assert bodies[0]["sequential_image_generation"] == "disabled"

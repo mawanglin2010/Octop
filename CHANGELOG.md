@@ -10,6 +10,9 @@
 - 媒体生成新增三家生图服务商：OpenAI（GPT Image，默认 `gpt-image-2.6-flare`）、Google Gemini（Nano Banana，默认 `gemini-nano-banana-2.1`）、腾讯云 TokenHub 混元生图（默认 `hy-image-v3.5-preview`，也可选 `hy-image-v3`）。在「设置 → 媒体生成」里添加，只支持生图，设置页不再显示它们的视频选项；“测试连接”对 Gemini 改用 `x-goog-api-key`。适配器按各家官方文档实现，尚未用真实密钥实测。
 - 媒体生成新增两个套餐服务商，复用现有的火山方舟和百炼适配器，只是换了接入地址和模型清单：火山方舟 Agent Plan（`https://ark.cn-beijing.volces.com/api/plan/v3`，需 Agent Plan 专属 API Key；生图 `doubao-seedream-5-0-pro` / `doubao-seedream-5.0-flash`，生视频 Seedance 2.0 fast/mini/2.0/2.5，视频只有 Large、Max 档可用）、阿里云百炼 Token Plan（`https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1`，`sk-sp-` 开头的套餐 Key，仅北京地域；生图 `wan2.7-image-pro` / `wan2.7-image` / `qwen-image-3.0-pro`，生视频 `wan3.0-video` / `happyhorse-1.1-t2v`）。两家套餐条款都限定在 AI 编程或智能体工具里交互式使用。按官方文档实现，尚未用真实密钥实测。
 
+### 修复
+- 火山方舟 Agent Plan 生图：单图请求不再发送 `sequential_image_generation`（Plan 端点的 `doubao-seedream-5.0-flash` 遇到该字段会返回 400），`doubao-seedream-5.0-*` 写法也按 Seedream 5 最小尺寸规则升到 `2K`。标准火山通道不变。
+
 ## [1.0.3b5] - 2026-11-11
 
 ### 新增
