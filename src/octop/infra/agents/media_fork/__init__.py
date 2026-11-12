@@ -18,15 +18,16 @@ Two more entries reuse the harness's own adapters under a subscription-plan base
 ``dashscope-token-plan`` (Alibaba Cloud Model Studio Token Plan, ``token-plan.cn-beijing.maas``
 host, ``sk-sp-`` key). Their endpoints and request bodies match the standard Ark / DashScope APIs
 per the plan docs (read 2026-11-12), so only the provider name, base URL and model list differ.
-These are not part of the upstream PRs.
+The one exception is Agent Plan image bodies, adjusted by ``ArkAgentPlanMediaProvider`` (see
+``ark_plan.py``). These are not part of the upstream PRs.
 """
 
 from __future__ import annotations
 
 from octop_harness.media.base import BaseMediaProvider
 from octop_harness.media.providers.dashscope import DashScopeMediaProvider
-from octop_harness.media.providers.volcengine import VolcengineMediaProvider
 
+from octop.infra.agents.media_fork.ark_plan import ArkAgentPlanMediaProvider
 from octop.infra.agents.media_fork.gemini import GeminiMediaProvider
 from octop.infra.agents.media_fork.openai import OpenAIMediaProvider
 from octop.infra.agents.media_fork.tencent import TencentMediaProvider
@@ -63,7 +64,7 @@ FORK_MEDIA_PROVIDERS: dict[str, type[BaseMediaProvider]] = {
     "openai": OpenAIMediaProvider,
     "gemini": GeminiMediaProvider,
     "tencent": TencentMediaProvider,
-    "volcengine-agent-plan": VolcengineMediaProvider,
+    "volcengine-agent-plan": ArkAgentPlanMediaProvider,
     "dashscope-token-plan": DashScopeMediaProvider,
 }
 IMAGE_ONLY_MEDIA_PROVIDERS: frozenset[str] = frozenset({"openai", "gemini", "tencent"})
@@ -85,6 +86,7 @@ def install_fork_media_providers() -> None:
 
 
 __all__ = [
+    "ArkAgentPlanMediaProvider",
     "FORK_MEDIA_PROVIDERS",
     "FORK_MEDIA_PROVIDER_DEFAULTS",
     "IMAGE_ONLY_MEDIA_PROVIDERS",
