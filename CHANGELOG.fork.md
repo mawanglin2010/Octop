@@ -4,6 +4,14 @@
 
 版本号规则：`<官方版本>.postN`，例如基于官方 1.0.2b9 的第 1 个 fork 版本是 `1.0.2b9.post1`。打 `fork-v<版本号>` 标签（如 `fork-v1.0.2b9.post6`；不用 `v` 开头，以免触发官方发布流程）后，`.github/workflows/fork-release.yml` 会构建 wheel 和飞牛原生版 FPK，并发布到 GitHub Release；本文件中同名版本小节会作为 Release 说明。
 
+## [1.0.3b5.post5] - 2026-11-12
+
+### 修复
+- 火山方舟 Agent Plan 生图全部失败（HTTP 400 `InvalidParameter: sequential_image_generation ... not supported by the current model`）：harness 的火山适配器即使只生成 1 张也会发送 `sequential_image_generation: "disabled"`，而 Plan 端点的 `doubao-seedream-5.0-flash` 不接受这个字段。新增 fork 专用适配器 `media_fork/ark_plan.py`（`ArkAgentPlanMediaProvider`，继承 harness 的火山适配器），只在 Agent Plan 的生图请求里于单图时去掉该字段；标准火山通道不变。根因由用户在真实 Plan 端点上对照实测确认（去掉该字段返回 200）。
+- 同一适配器让 `doubao-seedream-5.0-*`（点号写法）也走 Seedream 5 的最小尺寸规则：未指定或低于约 368 万像素时改用 `2K`，与 `5-0` 写法一致。
+- 多图（`count > 1`）仍会发送 `"auto"`，Plan 端点是否接受尚未实测。
+- 飞牛商店版本 1.0.30505。
+
 ## [1.0.3b5.post4] - 2026-11-12
 
 ### 新增
