@@ -208,43 +208,65 @@ async def test_token_plan_calls_plan_host() -> None:
 
 
 @pytest.mark.parametrize(
-    ("model", "size", "count", "expected_size", "expected_sequential"),
-    [
-        ("doubao-seedream-5.0-flash", None, 1, "2K", None),
-        ("doubao-seedream-5.0-flash", "1024x1024", 1, "2K", None),
-        ("doubao-seedream-5.0-flash", "2048x2048", 1, "2048x2048", None),
-        ("doubao-seedream-5.0-flash", None, 2, "2K", "auto"),
-    ],
+    ("size", "expected_size"),
+    [(None, "2K"), ("1024x1024", "2K"), ("2048x2048", "2048x2048")],
 )
 @pytest.mark.asyncio
 async def test_agent_plan_image_body_fits_plan_endpoint(
-    model: str,
-    size: str | None,
-    count: int,
-    expected_size: str,
-    expected_sequential: str | None,
+    size: str | None, expected_size: str
 ) -> None:
     bodies: list[dict[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         bodies.append(json.loads(request.content))
-        return httpx.Response(200, json={"data": [{"b64_json": _B64}] * count})
+        return httpx.Response(200, json={"data": [{"b64_json": _B64}]})
 
     config = MediaProviderConfig(
         id="ap",
         provider="volcengine-agent-plan",  # type: ignore[arg-type]
         api_key="k",
-        image_model=model,
+        image_model="doubao-seedream-5.0-flash",
     )
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         adapter = create_media_provider(config, client=client)
-        await adapter.generate_image(ImageGenerationRequest(prompt="cat", size=size, count=count))
+        await adapter.generate_image(ImageGenerationRequest(prompt="cat", size=size))
 
     (body,) = bodies
     assert body["size"] == expected_size
-    assert body.get("sequential_image_generation") == expected_sequential
-    if count > 1:
-        assert body["sequential_image_generation_options"] == {"max_images": count}
+    assert "sequential_image_generation" not in body
+    assert "sequential_image_generation_options" not in body
+
+
+@pytest.mark.parametrize(("seed", "expected_seeds"), [(None, [None] * 3), (7, [7, 8, 9])])
+@pytest.mark.asyncio
+async def test_agent_plan_multi_image_becomes_single_requests(
+    seed: int | None, expected_seeds: list[int | None]
+) -> None:
+    bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"data": [{"b64_json": _B64}]})
+
+    config = MediaProviderConfig(
+        id="ap",
+        provider="volcengine-agent-plan",  # type: ignore[arg-type]
+        api_key="k",
+        image_model="doubao-seedream-5.0-flash",
+    )
+    request = ImageGenerationRequest(prompt="cat", count=3, seed=seed)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        adapter = create_media_provider(config, client=client)
+        images = await adapter.generate_image(request)
+        submission = await adapter.submit_image(request)
+
+    assert len(images) == 3
+    assert len(submission.artifacts) == 3
+    assert len(bodies) == 6
+    for body in bodies:
+        assert "sequential_image_generation" not in body
+        assert "sequential_image_generation_options" not in body
+    assert [body.get("seed") for body in bodies[:3]] == expected_seeds
 
 
 @pytest.mark.asyncio
