@@ -19,6 +19,7 @@ import pytest
 from octop.config import OctopConfig
 from octop.i18n.domains.agents import NO_MODELS_CONFIGURED, format_agent_start_error
 from octop.infra.agents.manager import AgentManager, _memory_extract_settings
+from octop.infra.agents.shared_files import SHARED_FILE_TOOLS
 from octop.infra.backend.resolver import default_agent_backend_spec
 from octop.infra.db.migrate import run_migrations
 from octop.infra.db.pool import SqlitePool
@@ -916,6 +917,7 @@ def test_build_harness_config_includes_cronjob_tools_when_cron_manager_set(
         "cronjob_delete",
         "cronjob_run_now",
         "search_knowledge",
+        *SHARED_FILE_TOOLS,  # fork: per-user shared folder
     }
 
 
@@ -926,7 +928,7 @@ def test_build_harness_config_includes_search_knowledge_without_cron(
 
     cfg = manager._build_harness_config(_row(agent_id="AGT001"))
     assert cfg.tools is not None
-    assert {t.name for t in cfg.tools} == {"search_knowledge"}
+    assert {t.name for t in cfg.tools} == {"search_knowledge", *SHARED_FILE_TOOLS}  # fork
     assert any(isinstance(item, KnowledgeSearchHintMiddleware) for item in (cfg.middleware or []))
 
 
