@@ -4,13 +4,17 @@
 
 ## 工作流
 
-1. **接收**：文章包文件在工作区里就直接用；如果是把初稿和核验报告的文字贴在消息里，先 `article_pack.py new` 建包，再 `put 线索包 / 初稿 / 核验报告` 存入（`--file -` 可读标准输入）。
-2. **预检**（读取 `publish-gate`）：`python skills/wechat-draft/scripts/article_pack.py gate 文章包.md --for publish`（先不带 `--confirmed`），看除了“用户还没确认”之外有没有别的原因。有，就按原因退回，不继续。
-3. **检查环境**：`wechat_draft.py check`；缺凭据就告诉用户需要设置 `WECHAT_APP_ID` 和 `WECHAT_APP_SECRET`，用 `write_env_file` 引导写入，不要让用户把密钥发到对话里；需要时 `check --online` 试取 token，确认 IP 白名单。
-4. **预览与确认**：向用户展示发布预览（标题、作者、摘要、正文字数、参考来源条数、封面、图片数、核验结论和轮次、已知风险），问一句“确认存入公众号草稿箱吗？”。用户明确说确认才继续；先跑一次 `wechat_draft.py draft … --dry-run` 让预览有据可查。
-5. **执行**：`wechat_draft.py draft 文章包.md --cover 封面.jpg --author 作者 --confirmed`。成功后文章包里会写入“发布单”，台账追加一行。
-6. **交付**：回复里报告结果：media_id、草稿箱位置（公众号后台“内容与互动 → 草稿箱”）、提醒“只存了草稿，需要你预览后自己发布”、台账位置。发布单全文放进回复里。
-7. **其他平台**：`wechat_draft.py export 文章包.md --platform xiaohongshu|toutiao|plain -o 文本.txt`，把文本交给用户自行发布，发布后用 `ledger add` 记一笔。
+1. **接收**：一次只处理一个文章包（一个话题一篇）。
+   - 消息里给了共享名（如 `<话题>/文章包.md`）：`shared_file_get` 取回文章包；
+   - 文章包文件在工作区里就直接用；
+   - 只贴了文字：先 `article_pack.py new` 建包，再 `put 线索包 / 初稿 / 核验报告 / 配图单` 存入（`--file -` 可读标准输入）。
+2. **取配图**：文章包里有“配图单”时，`python skills/wechat-draft/scripts/wechat_draft.py figures 文章包.md` 列出每张图的共享名，逐个 `shared_file_get(name=共享名)` 取回（默认放到 `shared/<共享名>`），再跑一次 `figures` 确认哈希一致。取不到或哈希不符，就退回配图专家，不要自己找图替换。
+3. **预检**（读取 `publish-gate`）：`python skills/wechat-draft/scripts/article_pack.py gate 文章包.md --for publish`（先不带 `--confirmed`），看除了“用户还没确认”之外有没有别的原因。有，就按原因退回，不继续。
+4. **检查环境**：`wechat_draft.py check`；缺凭据就告诉用户需要设置 `WECHAT_APP_ID` 和 `WECHAT_APP_SECRET`，用 `write_env_file` 引导写入，不要让用户把密钥发到对话里；需要时 `check --online` 试取 token，确认 IP 白名单。
+5. **预览与确认**：向用户展示发布预览（标题、作者、摘要、正文字数、参考来源条数、封面、配图数和来源、核验结论和轮次、已知风险），问一句“确认存入公众号草稿箱吗？”。配图专家已经生成过预览 PDF 的，提醒用户以那份 PDF 为准。用户明确说确认才继续；先跑一次 `wechat_draft.py draft … --dry-run` 让预览有据可查。
+6. **执行**：`wechat_draft.py draft 文章包.md --author 作者 --confirmed`。有配图单时封面和正文配图自动从配图单取；没有配图单时要 `--cover 封面.jpg`。成功后文章包里会写入“发布单”，台账追加一行。
+7. **交付**：回复里报告结果：media_id、草稿箱位置（公众号后台“内容与互动 → 草稿箱”）、提醒“只存了草稿，需要你预览后自己发布”、台账位置。发布单全文放进回复里。
+8. **其他平台**：`wechat_draft.py export 文章包.md --platform xiaohongshu|toutiao|plain -o 文本.txt`，把文本交给用户自行发布，发布后用 `ledger add` 记一笔。
 
 ## 失败处理
 
@@ -28,6 +32,7 @@
 ## 底线
 
 - 不发没有通过核验的稿子；不发核验之后改过的稿子；没有用户明确确认不执行。
+- 配图只用配图单登记过的那几张，哈希必须一致；不自己找图、换图或删图。
 - 不把 AppID、AppSecret、access_token 写进任何文件、回复或台账。
 - 不批量、不多号、不绕过平台限制；不为了“发出去”修改稿子、跳过检查或用 `--force` 重复发布，除非用户明确要求并说明原因。
 - 不替用户点“群发”：只存草稿。

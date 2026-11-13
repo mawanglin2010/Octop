@@ -1,0 +1,139 @@
+{
+  "id": "article-illustrator",
+  "scene": "content-creation",
+  "label": {
+    "zh": "推文配图专家",
+    "en": "Article Illustrator"
+  },
+  "description": {
+    "zh": "给核验通过的公众号文章配封面和正文插图：先读懂文章、规划配图位置（封面、开头、第几段后、哪个小标题后），能搜到授权清楚的图就用搜索的（官方发布、CC 协议、公有领域、免费图库，记录图片地址、来源页、署名和授权，授权不明的不用），搜不到就调用生图模型生成（提示词写清主体、风格、构图和色调，封面按 2.35:1 裁剪，图注自动标“AI 生成”）；配图登记在文章包的“配图单”里、不改初稿，核验报告不会因此过期；把图文排成预览 PDF 给用户预览，再经共享文件夹把图片和文章包交给发布专员。是内容团队核验之后、发布之前的一站。",
+    "en": "Illustrates fact-checked WeChat articles with a cover and inline images: reads the article, plans where images go (cover, opening, after paragraph N, after a heading), uses searched images only when the licence is clear (official releases, Creative Commons, public domain, free stock; image URL, source page, credit and licence recorded) and otherwise generates them with the image model (prompts cover subject, style, composition and palette; covers cropped to 2.35:1; captions labelled AI-generated); figures go into the pack's figure list without touching the draft, so the review stays valid; exports a preview PDF for the user and hands images and the pack to the publisher through the shared folder. The content team's step after fact-checking and before publishing."
+  },
+  "welcome_message": {
+    "zh": "把要配图的文章（或文章包的共享名）发给我，说说账号喜欢什么风格",
+    "en": "Send me the article (or the pack's shared name) and tell me the account's visual style"
+  },
+  "icon_name": "palette",
+  "color": "#6D28D9",
+  "prompt_files": [
+    "SOUL.md",
+    "IDENTITY.md",
+    "AGENTS.md"
+  ],
+  "quick_prompts": [
+    {
+      "title": {
+        "zh": "给文章配图",
+        "en": "Illustrate an article"
+      },
+      "description": {
+        "zh": "封面加正文插图",
+        "en": "Cover plus inline images"
+      },
+      "prompt": {
+        "zh": "帮这篇文章配图：封面 1 张、正文 2–3 张，风格 ___，先搜官方或免费图库的图，搜不到再生成，最后给我一份预览 PDF。文章包共享名 ___。",
+        "en": "Illustrate this article: one cover and 2–3 inline images in a ___ style; search official or free stock images first and generate the rest, then give me a preview PDF. Pack shared name: ___."
+      },
+      "color": "#fce7f3",
+      "icon_name": "palette"
+    },
+    {
+      "title": {
+        "zh": "只做封面",
+        "en": "Cover only"
+      },
+      "description": {
+        "zh": "2.35:1 横版封面",
+        "en": "2.35:1 banner"
+      },
+      "prompt": {
+        "zh": "给这篇文章做一张公众号封面，横版 2.35:1，风格 ___，画面里不要文字。文章：___",
+        "en": "Make a WeChat cover for this article, 2.35:1 landscape, ___ style, no text in the image. Article: ___"
+      },
+      "color": "#e0f2fe",
+      "icon_name": "sparkles"
+    },
+    {
+      "title": {
+        "zh": "出预览 PDF",
+        "en": "Preview PDF"
+      },
+      "description": {
+        "zh": "图文排版后导出",
+        "en": "Lay out and export"
+      },
+      "prompt": {
+        "zh": "把文章包 ___ 的初稿和配图排好，导出一份预览 PDF 给我看。",
+        "en": "Lay out the draft and figures of pack ___ and export a preview PDF for me."
+      },
+      "color": "#dcfce7",
+      "icon_name": "file-text"
+    },
+    {
+      "title": {
+        "zh": "检查图片授权",
+        "en": "Check licences"
+      },
+      "description": {
+        "zh": "这些图能不能用",
+        "en": "Can these be used?"
+      },
+      "prompt": {
+        "zh": "这几张图我想用在公众号文章里：___，帮我查来源页的授权、该怎么署名，不能用的换成生成图。",
+        "en": "I want to use these images in an article: ___; check each source page's licence and credit, and replace any that can't be used with generated ones."
+      },
+      "color": "#fef3c7",
+      "icon_name": "shield-check"
+    },
+    {
+      "title": {
+        "zh": "换一张图",
+        "en": "Replace a figure"
+      },
+      "description": {
+        "zh": "不满意就重做",
+        "en": "Redo one image"
+      },
+      "prompt": {
+        "zh": "配图单里的 ___ 不合适，原因是 ___，换一张（可以重新生成），更新配图单和预览 PDF。",
+        "en": "Figure ___ doesn't work because ___; replace it (regenerate if needed) and update the figure list and preview PDF."
+      },
+      "color": "#ede9fe",
+      "icon_name": "refresh-cw"
+    },
+    {
+      "title": {
+        "zh": "交给发布专员",
+        "en": "Hand off"
+      },
+      "description": {
+        "zh": "放进共享文件夹",
+        "en": "Via the shared folder"
+      },
+      "prompt": {
+        "zh": "配图已经确认，把图片和文章包放进共享文件夹，告诉我给发布专员的共享名。",
+        "en": "The figures are approved; put the images and the pack into the shared folder and tell me the shared names for the publisher."
+      },
+      "color": "#f1f5f9",
+      "icon_name": "list-todo"
+    }
+  ],
+  "task_examples": {
+    "zh": [
+      "每篇文章核验通过后「立即」配图并生成预览 PDF",
+      "每天「17:00」给当天核验通过的文章补齐封面",
+      "每周一「10:00」检查上周配图的授权记录是否完整",
+      "每次用户改稿后「立即」检查配图位置是否还对得上",
+      "每月 1 日「9:00」整理上月用过的免费图库来源和署名",
+      "每次发布前「立即」把图片和文章包放进共享文件夹"
+    ],
+    "en": [
+      "Whenever an article passes fact-checking, illustrate it and export a preview PDF",
+      "Every day at 17:00, add covers to articles approved today",
+      "Every Monday at 10:00, check last week's figure licence records are complete",
+      "Whenever the user edits a draft, check figure positions still match",
+      "On the 1st of each month at 9:00, list last month's stock sources and credits",
+      "Before every publish, put images and the pack into the shared folder"
+    ]
+  }
+}

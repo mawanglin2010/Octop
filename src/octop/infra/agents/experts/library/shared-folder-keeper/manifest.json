@@ -1,0 +1,139 @@
+{
+  "id": "shared-folder-keeper",
+  "scene": "tech",
+  "label": {
+    "zh": "共享文件夹管理员",
+    "en": "Shared Folder Keeper"
+  },
+  "description": {
+    "zh": "查看和清理共享文件夹：同一用户的专家用共享文件夹互相交接配图、预览 PDF、文章包和数据文件，它不会自动清理。按文件夹汇总文件数、大小和最近修改时间，按天数、文件夹或文件类型挑出可以清理的候选，列给用户确认后逐个删除，并报告释放的空间；最近 7 天动过的和还在用的话题默认不删。",
+    "en": "Reviews and tidies the shared folder that one user's experts use to hand files to each other (figures, preview PDFs, article packs, data files), which is never cleaned up automatically. Summarises files, size and last change per folder, picks cleanup candidates by age, folder or file type, deletes only what the user confirms and reports the space freed; anything changed in the last 7 days or still in use is kept by default."
+  },
+  "welcome_message": {
+    "zh": "想看看共享文件夹里有什么，还是清理一下？",
+    "en": "Want to see what's in the shared folder, or tidy it up?"
+  },
+  "icon_name": "hard-drive",
+  "color": "#0F766E",
+  "prompt_files": [
+    "SOUL.md",
+    "IDENTITY.md",
+    "AGENTS.md"
+  ],
+  "quick_prompts": [
+    {
+      "title": {
+        "zh": "看看有什么",
+        "en": "What's inside"
+      },
+      "description": {
+        "zh": "按文件夹汇总",
+        "en": "Summary by folder"
+      },
+      "prompt": {
+        "zh": "共享文件夹里现在有什么？按文件夹告诉我文件数、大小和最近修改时间。",
+        "en": "What's in the shared folder? Give me file counts, size and last change per folder."
+      },
+      "color": "#e0f2fe",
+      "icon_name": "list-todo"
+    },
+    {
+      "title": {
+        "zh": "清理旧文件",
+        "en": "Tidy old files"
+      },
+      "description": {
+        "zh": "超过 N 天没动的",
+        "en": "Untouched for N days"
+      },
+      "prompt": {
+        "zh": "把共享文件夹里超过 ___ 天没动过的文件列出来，我确认后再删。",
+        "en": "List files in the shared folder untouched for more than ___ days; delete them after I confirm."
+      },
+      "color": "#fef3c7",
+      "icon_name": "refresh-cw"
+    },
+    {
+      "title": {
+        "zh": "删掉一个话题",
+        "en": "Remove a topic"
+      },
+      "description": {
+        "zh": "整个文件夹",
+        "en": "A whole folder"
+      },
+      "prompt": {
+        "zh": "话题 ___ 已经发完了，把共享文件夹里这个话题的文件列给我，确认后删掉。",
+        "en": "Topic ___ is published; list its files in the shared folder and delete them after I confirm."
+      },
+      "color": "#fee2e2",
+      "icon_name": "file-text"
+    },
+    {
+      "title": {
+        "zh": "只清理 PDF",
+        "en": "PDFs only"
+      },
+      "description": {
+        "zh": "预览稿占空间",
+        "en": "Previews take space"
+      },
+      "prompt": {
+        "zh": "把共享文件夹里的预览 PDF 列出来，按大小排序，告诉我哪些可以删。",
+        "en": "List preview PDFs in the shared folder by size and tell me which can go."
+      },
+      "color": "#ede9fe",
+      "icon_name": "file-text"
+    },
+    {
+      "title": {
+        "zh": "空间占用",
+        "en": "Space used"
+      },
+      "description": {
+        "zh": "哪个文件夹最大",
+        "en": "Largest folders"
+      },
+      "prompt": {
+        "zh": "共享文件夹一共占了多少空间？哪几个文件夹最大？",
+        "en": "How much space does the shared folder use, and which folders are largest?"
+      },
+      "color": "#dcfce7",
+      "icon_name": "bar-chart-3"
+    },
+    {
+      "title": {
+        "zh": "定期清理",
+        "en": "Scheduled tidy"
+      },
+      "description": {
+        "zh": "每月提醒",
+        "en": "Monthly reminder"
+      },
+      "prompt": {
+        "zh": "每月 1 号帮我检查共享文件夹，列出超过 60 天没动的文件，等我确认再删。",
+        "en": "On the 1st of every month, check the shared folder and list files untouched for 60 days; wait for my confirmation before deleting."
+      },
+      "color": "#f1f5f9",
+      "icon_name": "bell"
+    }
+  ],
+  "task_examples": {
+    "zh": [
+      "每月 1 日「9:00」列出共享文件夹里超过 60 天没动的文件，等我确认",
+      "每周一「10:00」汇报共享文件夹的空间占用",
+      "每次文章发布后「立即」列出该话题文件夹，问我要不要清理",
+      "每天「22:00」检查共享文件夹是否超过 2 GB",
+      "每周五「17:00」列出本周新增的共享文件",
+      "每季度第一天「9:00」整理共享文件夹里的预览 PDF"
+    ],
+    "en": [
+      "On the 1st of each month at 9:00, list shared files untouched for 60 days and wait for my confirmation",
+      "Every Monday at 10:00, report shared folder space usage",
+      "After every publish, list that topic's folder and ask whether to clean it",
+      "Every day at 22:00, check whether the shared folder exceeds 2 GB",
+      "Every Friday at 17:00, list shared files added this week",
+      "On the first day of each quarter at 9:00, tidy preview PDFs in the shared folder"
+    ]
+  }
+}

@@ -2,11 +2,13 @@
 """文章包：内容团队各成员之间交接的统一文本格式，以及发布前的把关。
 
 成员的工作区互相看不见，主持人只能转述文字，所以每一站都把成果写进同一份“文章包”，下一站接着读：
-    选题单 → 线索包 → 初稿 → 核验报告 → 发布单
-本脚本在内容采集员、公众号写作专家、内容核验员、发布专员四处各存一份，内容完全相同（有测试保证）。
+    选题单 → 线索包 → 初稿 → 核验报告 → 配图单 → 发布单
+一个文章包只写一个话题：用户给了多个热点或主题时，每个各建一个文章包、各写一篇（batch 一次建好）。
+本脚本在内容采集员、公众号写作专家、内容核验员、推文配图专家、发布专员处各存一份，内容完全相同（有测试保证）。
 
 Usage:
     python scripts/article_pack.py new 文章包.md --topic 话题 [--platform 公众号] [--audience ..] [--length ..] [--style ..] [--avoid ..]
+    python scripts/article_pack.py batch 目录 --topic 话题1 --topic 话题2 [...同 new 的选项]   # 每个话题一个文章包
     python scripts/article_pack.py show 文章包.md [--json]
     python scripts/article_pack.py get 文章包.md 初稿 [-o 初稿.md]
     python scripts/article_pack.py put 文章包.md 线索包 --file 线索.md      # 整节替换；- 表示读标准输入
@@ -20,6 +22,14 @@ Usage:
     - 摘录：
       > 原文逐字摘录（核验时只认这里的文字）
 初稿里的事实在句末用 [S1]、[S1,S2] 标来源；核验报告用“核验对象：sha256:…”记录核验的是哪一版初稿。
+
+配图单里每张图是一个 “### P1” 小节（配图不改初稿，渲染时按“位置”插入，所以核验报告不会因此过期）：
+    - 位置：封面 | 开头 | 第3段后 | 「小标题文字」后       （“段”= 标题以下每个正文段落，plan 命令会列出编号）
+    - 方式：搜索 | 生成
+    - 文件：images/<话题>/P1.jpg（配图专家工作区里的路径）   - 共享名：<话题>/P1.jpg（共享文件夹里的名字）
+    - 哈希：sha256:…（文件内容）                            - 图注：…
+    搜索来的图还要：网址（图片地址）、来源页、署名、授权（如 CC BY 4.0、官方发布允许转载、已获授权、公有领域）；
+    生成的图还要：提示词、模型；图注渲染时自动加“（AI 生成）”。
 
 可信度：A 一手来源（官方公告、原始文件、论文）；B 主流媒体或权威机构的转述；C 自媒体、论坛、单一来源；D 无法核实、匿名传言。
 
@@ -37,7 +47,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-SECTIONS = ["选题单", "线索包", "初稿", "核验报告", "发布单"]
+SECTIONS = ["选题单", "线索包", "初稿", "核验报告", "配图单", "发布单"]
 FRONT_KEY = "article-pack"
 FRONT_VERSION = "1"
 CREDIBILITY = ("A", "B", "C", "D")
@@ -50,6 +60,17 @@ QUOTE_RE = re.compile(r"^\s*>\s?(.*)$")
 SOURCE_HEAD_RE = re.compile(r"^###\s+(S\d+)\s*$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 REQUIRED_SOURCE_FIELDS = ("标题", "网址", "发布日期", "抓取时间", "可信度", "状态")
+FIGURE_HEAD_RE = re.compile(r"^###\s+(P\d+)\s*$")
+FIGURE_MODES = ("搜索", "生成")
+REQUIRED_FIGURE_FIELDS = ("位置", "方式", "文件", "共享名", "哈希", "图注")
+SEARCH_FIGURE_FIELDS = ("网址", "来源页", "署名", "授权")
+GENERATED_FIGURE_FIELDS = ("提示词", "模型")
+UNKNOWN_LICENSE = ("", "未知", "不明", "不详", "无", "待确认")
+AI_LABEL = "（AI 生成）"
+POS_PARA_RE = re.compile(r"^第\s*(\d+)\s*段后$")
+POS_HEAD_RE = re.compile(r"^[「“\"](.+?)[」”\"]\s*后$")
+SKIP_PARA_RE = re.compile(r"^(?:#|!\[|>|\||-{3,}\s*$|```|(?:摘要|导语)\s*[：:])")
+REF_HEAD_RE = re.compile(r"^#{2,6}\s*(?:参考来源|参考资料|参考链接)\s*$")
 
 
 @dataclass
@@ -68,6 +89,26 @@ class Source:
 
 
 @dataclass
+class Figure:
+    id: str
+    fields: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def position(self) -> str:
+        return self.fields.get("位置", "")
+
+    @property
+    def mode(self) -> str:
+        return self.fields.get("方式", "")
+
+    def caption(self) -> str:
+        text = self.fields.get("图注", "")
+        if self.mode == "生成" and AI_LABEL not in text:
+            text = f"{text}{AI_LABEL}"
+        return text
+
+
+@dataclass
 class Pack:
     front: dict[str, str]
     sections: dict[str, str]
@@ -81,6 +122,9 @@ class Pack:
 
     def draft(self) -> str:
         return self.sections.get("初稿", "")
+
+    def figures(self) -> list[Figure]:
+        return parse_figures(self.sections.get("配图单", ""))
 
 
 @dataclass
@@ -96,6 +140,11 @@ def normalize(text: str) -> str:
 
 def text_hash(text: str) -> str:
     return "sha256:" + hashlib.sha256(normalize(text).encode("utf-8")).hexdigest()[:12]
+
+
+def file_hash(data: bytes) -> str:
+    """Hash of an image file, as recorded in the 配图单 (“哈希：sha256:…”)."""
+    return "sha256:" + hashlib.sha256(data).hexdigest()[:12]
 
 
 def citation_ids(text: str) -> list[str]:
@@ -153,6 +202,136 @@ def parse_sources(text: str) -> list[Source]:
             body.append(line)
     flush()
     return sources
+
+
+def parse_figures(text: str) -> list[Figure]:
+    figures: list[Figure] = []
+    cur: Figure | None = None
+    body: list[str] = []
+    for line in text.splitlines() + ["### P0"]:
+        head = FIGURE_HEAD_RE.match(line)
+        if head:
+            if cur is not None:
+                cur.fields = parse_fields(body)
+                figures.append(cur)
+            cur, body = Figure(head.group(1)), []
+        elif cur is not None:
+            body.append(line)
+    return figures
+
+
+def slugify(topic: str, limit: int = 40) -> str:
+    """File-system friendly name for a topic (keeps Chinese, drops path and shell characters)."""
+    out = re.sub(
+        r"[\s/\\:*?\"<>|#%&{}$!'`@+=,;\[\]()（）【】《》，。、；：！？“”‘’]+", "-", topic.strip()
+    )
+    out = re.sub(r"-{2,}", "-", out).strip("-.")
+    return out[:limit].rstrip("-.") or "topic"
+
+
+def paragraphs(draft: str) -> list[str]:
+    """Body paragraphs of a draft, numbered from 1 by figure positions (“第N段后”)."""
+    out: list[str] = []
+    seen_title = False
+    for line in draft.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if not seen_title and re.match(r"^#\s+\S", s):
+            seen_title = True
+            continue
+        if REF_HEAD_RE.match(s):
+            break
+        if SKIP_PARA_RE.match(s):
+            continue
+        out.append(s)
+    return out
+
+
+def headings(draft: str) -> list[str]:
+    return [m.group(1).strip() for m in re.finditer(r"(?m)^#{2,6}\s+(.+?)\s*$", draft)]
+
+
+def position_error(pos: str, draft: str) -> str | None:
+    """Why *pos* is not a valid figure position for *draft* (None when it is)."""
+    if pos in ("封面", "开头"):
+        return None
+    m = POS_PARA_RE.match(pos)
+    if m:
+        n, total = int(m.group(1)), len(paragraphs(draft))
+        if draft and not 1 <= n <= total:
+            return f"位置“{pos}”超出范围：初稿正文共 {total} 段"
+        return None
+    m = POS_HEAD_RE.match(pos)
+    if m:
+        if draft and m.group(1).strip() not in headings(draft):
+            return f"位置“{pos}”：初稿里没有这个小标题"
+        return None
+    return f"位置“{pos}”应为 封面、开头、第N段后 或 「小标题」后"
+
+
+def illustrated_lines(draft: str, figures: list[Figure], src_for) -> list[str]:  # type: ignore[no-untyped-def]
+    """Draft lines with ``![图注](src)`` inserted at each figure's position (cover excluded).
+
+    ``src_for(figure)`` returns the image address to use, or None to skip that figure.
+    """
+    by_para: dict[int, list[Figure]] = {}
+    by_head: dict[str, list[Figure]] = {}
+    lead: list[Figure] = []
+    for fig in figures:
+        pos = fig.position
+        if pos == "开头":
+            lead.append(fig)
+        elif m := POS_PARA_RE.match(pos):
+            by_para.setdefault(int(m.group(1)), []).append(fig)
+        elif m := POS_HEAD_RE.match(pos):
+            by_head.setdefault(m.group(1).strip(), []).append(fig)
+
+    def img(figs: list[Figure]) -> list[str]:
+        out = []
+        for fig in figs:
+            src = src_for(fig)
+            if src:
+                out.append(f"![{fig.caption()}]({src})")
+        return out
+
+    out: list[str] = []
+    seen_title = False
+    para = 0
+    in_refs = False
+    for line in draft.splitlines():
+        out.append(line)
+        s = line.strip()
+        if not s or in_refs:
+            continue
+        if not seen_title and re.match(r"^#\s+\S", s):
+            seen_title = True
+            out.extend(img(lead))
+            continue
+        if REF_HEAD_RE.match(s):
+            in_refs = True
+            continue
+        head = re.match(r"^#{2,6}\s+(.+?)\s*$", s)
+        if head:
+            out.extend(img(by_head.get(head.group(1).strip(), [])))
+            continue
+        if SKIP_PARA_RE.match(s):
+            continue
+        para += 1
+        out.extend(img(by_para.get(para, [])))
+    if not seen_title:
+        out[0:0] = img(lead)
+    return out
+
+
+def figure_credits(figures: list[Figure]) -> list[str]:
+    """“图片来源” lines for searched images (generated ones are labelled in their captions)."""
+    out = []
+    for fig in figures:
+        if fig.mode == "搜索":
+            f = fig.fields
+            out.append(f"{fig.id}：{f.get('署名', '')}，{f.get('授权', '')}，{f.get('来源页', '')}")
+    return out
 
 
 def parse_pack(text: str) -> Pack:
@@ -293,6 +472,46 @@ def validate(pack: Pack) -> list[Issue]:
         elif report_current(pack) is False:
             err("核验报告", "初稿在核验之后改过，核验报告已过期，需要重新核验")
 
+    if "配图单" in pack.sections:
+        figures = pack.figures()
+        if not figures:
+            err("配图单", "配图单里一张图都没有（每张图是一个 “### P1” 小节）")
+        ids: set[str] = set()
+        covers = 0
+        for fig in figures:
+            f = fig.fields
+            if fig.id in ids:
+                err(fig.id, "配图编号重复")
+            ids.add(fig.id)
+            for key in REQUIRED_FIGURE_FIELDS:
+                if not f.get(key):
+                    err(fig.id, f"缺少“{key}”")
+            if fig.mode and fig.mode not in FIGURE_MODES:
+                err(fig.id, f"方式“{fig.mode}”应为 {'、'.join(FIGURE_MODES)}")
+            extra = SEARCH_FIGURE_FIELDS if fig.mode == "搜索" else GENERATED_FIGURE_FIELDS
+            for key in extra if fig.mode in FIGURE_MODES else ():
+                if not f.get(key):
+                    err(fig.id, f"{fig.mode}的图缺少“{key}”")
+            if fig.mode == "搜索":
+                if f.get("授权", "").strip() in UNKNOWN_LICENSE:
+                    err(fig.id, "授权不明的图不能用：换一张能确认授权的图，或改用生成")
+                for key in ("网址", "来源页"):
+                    if f.get(key) and not re.match(r"^https?://", f[key]):
+                        err(fig.id, f"{key}必须以 http:// 或 https:// 开头")
+            if f.get("哈希") and not f["哈希"].startswith("sha256:"):
+                err(fig.id, "哈希应为 sha256:…（用 figures.py add 登记会自动算）")
+            if fig.position:
+                problem = position_error(fig.position, draft)
+                if problem:
+                    err(fig.id, problem)
+            covers += fig.position == "封面"
+            if re.search(r"\d", f.get("图注", "")):
+                warn(fig.id, "图注里有数字：图注只描述画面，数字要来自初稿并经过核验")
+        if covers > 1:
+            err("配图单", f"有 {covers} 张封面，只能有一张")
+        elif covers == 0:
+            warn("配图单", "没有封面（位置写“封面”）；存公众号草稿时必须有封面")
+
     if "发布单" in pack.sections:
         state = parse_fields(pack.sections["发布单"].splitlines()).get("状态", "")
         if state not in PUBLISH_STATES:
@@ -330,6 +549,7 @@ def summary(pack: Pack) -> dict[str, object]:
         "初稿字数": len(re.sub(r"\s", "", draft)),
         "初稿哈希": text_hash(draft) if draft else None,
         "引用的来源": citation_ids(draft),
+        "配图数": len(pack.figures()),
         "核验结论": rep.get("结论"),
         "核验轮次": rep.get("轮次"),
         "核验对应当前初稿": report_current(pack),
@@ -345,11 +565,31 @@ def render_summary(info: dict[str, object]) -> str:
         f"已有章节：{' → '.join(info['已有章节']) or '无'}",  # type: ignore[arg-type]
         f"来源：{info['来源数']} 条 {info['来源状态'] or ''}",
         f"初稿：{info['初稿字数']} 字，哈希 {info['初稿哈希'] or '-'}；引用 {len(info['引用的来源'])} 条来源",  # type: ignore[arg-type]
+        f"配图：{info['配图数']} 张",
         f"核验：{info['核验结论'] or '未核验'}{stale}"
         + (f"，第 {info['核验轮次']} 轮" if info["核验轮次"] else ""),
         f"发布：{info['发布状态'] or '未发布'}",
     ]
     return "\n".join(out)
+
+
+def new_pack(a: argparse.Namespace, topic: str) -> Pack:
+    brief = [
+        f"- 话题：{topic}",
+        f"- 目标平台：{a.platform}",
+        f"- 读者：{a.audience or '（待补充）'}",
+        f"- 篇幅：{a.length or '（待补充）'}",
+        f"- 风格：{a.style or '（待补充）'}",
+        f"- 禁区：{a.avoid or '无'}",
+    ]
+    return Pack(
+        {
+            FRONT_KEY: FRONT_VERSION,
+            "topic": topic,
+            "created": datetime.now().astimezone().isoformat(timespec="seconds"),
+        },
+        {"选题单": "\n".join(brief)},
+    )
 
 
 def cmd_new(a: argparse.Namespace) -> int:
@@ -360,24 +600,32 @@ def cmd_new(a: argparse.Namespace) -> int:
     if not a.topic.strip():
         print("话题不能为空", file=sys.stderr)
         return 1
-    brief = [
-        f"- 话题：{a.topic.strip()}",
-        f"- 目标平台：{a.platform}",
-        f"- 读者：{a.audience or '（待补充）'}",
-        f"- 篇幅：{a.length or '（待补充）'}",
-        f"- 风格：{a.style or '（待补充）'}",
-        f"- 禁区：{a.avoid or '无'}",
-    ]
-    pack = Pack(
-        {
-            FRONT_KEY: FRONT_VERSION,
-            "topic": a.topic.strip(),
-            "created": datetime.now().astimezone().isoformat(timespec="seconds"),
-        },
-        {"选题单": "\n".join(brief)},
-    )
-    write_pack(path, pack)
+    write_pack(path, new_pack(a, a.topic.strip()))
     print(path)
+    return 0
+
+
+def cmd_batch(a: argparse.Namespace) -> int:
+    """One pack per topic: several hot topics or themes become several articles, never one."""
+    topics = list(dict.fromkeys(t.strip() for t in a.topic if t.strip()))
+    if not topics:
+        print("至少给一个 --topic", file=sys.stderr)
+        return 1
+    root = Path(a.dir)
+    paths: list[Path] = []
+    for topic in topics:
+        base = slugify(topic)
+        path, n = root / f"{base}.md", 2
+        while path in paths:
+            path, n = root / f"{base}-{n}.md", n + 1
+        if path.exists() and not a.force:
+            print(f"{path} 已存在，不会覆盖（要重建加 --force）", file=sys.stderr)
+            return 1
+        paths.append(path)
+    for topic, path in zip(topics, paths, strict=True):
+        write_pack(path, new_pack(a, topic))
+        print(f"{path}\t{topic}")
+    print(f"共 {len(paths)} 个文章包：每个话题单独采集、写作、核验、配图，各出一篇")
     return 0
 
 
@@ -492,6 +740,14 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--avoid", default="")
     n.add_argument("--force", action="store_true")
     n.set_defaults(fn=cmd_new)
+    b = sub.add_parser("batch")
+    b.add_argument("dir")
+    b.add_argument("--topic", action="append", required=True)
+    for opt, default in (("--platform", "微信公众号"), ("--audience", ""), ("--length", ""),
+                         ("--style", ""), ("--avoid", "")):  # fmt: skip
+        b.add_argument(opt, default=default)
+    b.add_argument("--force", action="store_true")
+    b.set_defaults(fn=cmd_batch)
     s = sub.add_parser("show")
     s.add_argument("path")
     s.add_argument("--json", action="store_true")

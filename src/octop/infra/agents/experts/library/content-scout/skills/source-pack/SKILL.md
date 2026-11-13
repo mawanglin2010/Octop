@@ -1,6 +1,6 @@
 ---
 name: source-pack
-description: "登记和整理线索包：source_pack.py 抓取网页并按关键词逐字取原句作为摘录（fetch）、手工登记来源（add）、检查每条链接能否打开并写回结果（check）、按网址和摘录相似度去重（dedupe）、按发布日期排时间线（timeline）、列出来源（list）；article_pack.py 建立和校验整份文章包（选题单、线索包、初稿、核验报告、发布单）。收集好的线索要交给撰稿人时使用。"
+description: "登记和整理线索包：source_pack.py 抓取网页并按关键词逐字取原句作为摘录（fetch）、手工登记来源（add）、检查每条链接能否打开并写回结果（check）、按网址和摘录相似度去重（dedupe）、按发布日期排时间线（timeline）、列出来源（list）；article_pack.py 建立和校验整份文章包（选题单、线索包、初稿、核验报告、配图单、发布单）。收集好的线索要交给撰稿人时使用。"
 metadata:
   octop:
     emoji: "🧾"
@@ -16,7 +16,7 @@ metadata:
 
 > `scripts/` 路径相对于本技能目录。
 
-整个内容团队用同一份“文章包”交接工作：选题单 → 线索包 → 初稿 → 核验报告 → 发布单。你负责前两节。格式和各字段含义见 `scripts/article_pack.py` 开头的说明。
+整个内容团队用同一份“文章包”交接工作：选题单 → 线索包 → 初稿 → 核验报告 → 配图单 → 发布单。你负责前两节。格式和各字段含义见 `scripts/article_pack.py` 开头的说明。
 
 ## 1. 建文章包
 
