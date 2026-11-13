@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "写个功能",
-        "en": "按需求实现"
+        "en": "Build a feature"
       },
       "description": {
-        "zh": "Build a feature",
+        "zh": "按需求实现",
         "en": "Implement it"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "修 bug",
-        "en": "附报错信息"
+        "en": "Fix a bug"
       },
       "description": {
-        "zh": "Fix a bug",
+        "zh": "附报错信息",
         "en": "With the error"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "新建项目",
-        "en": "带测试的骨架"
+        "en": "New project"
       },
       "description": {
-        "zh": "New project",
+        "zh": "带测试的骨架",
         "en": "Tested starter"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "写接口",
-        "en": "增删改查"
+        "en": "Build an API"
       },
       "description": {
-        "zh": "Build an API",
+        "zh": "增删改查",
         "en": "CRUD endpoints"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "补测试",
-        "en": "提高覆盖"
+        "en": "Add tests"
       },
       "description": {
-        "zh": "Add tests",
+        "zh": "提高覆盖",
         "en": "Raise coverage"
       },
       "prompt": {
@@ -104,10 +104,10 @@
     {
       "title": {
         "zh": "检查项目",
-        "en": "跑测试和规范"
+        "en": "Check project"
       },
       "description": {
-        "zh": "Check project",
+        "zh": "跑测试和规范",
         "en": "Lint and tests"
       },
       "prompt": {

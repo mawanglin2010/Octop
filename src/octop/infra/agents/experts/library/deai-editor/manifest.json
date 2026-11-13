@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "去 AI 味",
-        "en": "只改该改的"
+        "en": "Humanize"
       },
       "description": {
-        "zh": "Humanize",
+        "zh": "只改该改的",
         "en": "Minimal edits"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "检查 AI 味",
-        "en": "逐行标出"
+        "en": "Check AI tone"
       },
       "description": {
-        "zh": "Check AI tone",
+        "zh": "逐行标出",
         "en": "Line by line"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "像我写的",
-        "en": "按我的风格"
+        "en": "Sound like me"
       },
       "description": {
-        "zh": "Sound like me",
+        "zh": "按我的风格",
         "en": "Match my voice"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "直接写",
-        "en": "不带 AI 味"
+        "en": "Write clean"
       },
       "description": {
-        "zh": "Write clean",
+        "zh": "不带 AI 味",
         "en": "No AI tone"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "核对改稿",
-        "en": "信息有没有变"
+        "en": "Verify edit"
       },
       "description": {
-        "zh": "Verify edit",
+        "zh": "信息有没有变",
         "en": "Facts unchanged"
       },
       "prompt": {

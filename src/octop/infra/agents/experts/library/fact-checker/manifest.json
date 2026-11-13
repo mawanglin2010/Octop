@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "核验稿子",
-        "en": "逐条对出处"
+        "en": "Check a draft"
       },
       "description": {
-        "zh": "Check a draft",
+        "zh": "逐条对出处",
         "en": "Line by line"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "事实溯源",
-        "en": "哪句没出处"
+        "en": "Trace the claims"
       },
       "description": {
-        "zh": "Trace the claims",
+        "zh": "哪句没出处",
         "en": "Which lines lack sources"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "合规检查",
-        "en": "广告法和诱导分享"
+        "en": "Compliance check"
       },
       "description": {
-        "zh": "Compliance check",
+        "zh": "广告法和诱导分享",
         "en": "Ad law and inducements"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "查是否洗稿",
-        "en": "逐字重合"
+        "en": "Originality"
       },
       "description": {
-        "zh": "Originality",
+        "zh": "逐字重合",
         "en": "Verbatim overlap"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "格式检查",
-        "en": "按平台限制"
+        "en": "Format check"
       },
       "description": {
-        "zh": "Format check",
+        "zh": "按平台限制",
         "en": "Per platform limits"
       },
       "prompt": {
@@ -104,10 +104,10 @@
     {
       "title": {
         "zh": "复核修改",
-        "en": "第二轮核验"
+        "en": "Re-check a revision"
       },
       "description": {
-        "zh": "Re-check a revision",
+        "zh": "第二轮核验",
         "en": "Second round"
       },
       "prompt": {
