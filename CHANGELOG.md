@@ -9,8 +9,12 @@
 ### 新增
 - 媒体生成新增三家生图服务商：OpenAI（GPT Image，默认 `gpt-image-2.6-flare`）、Google Gemini（Nano Banana，默认 `gemini-nano-banana-2.1`）、腾讯云 TokenHub 混元生图（默认 `hy-image-v3.5-preview`，也可选 `hy-image-v3`）。在「设置 → 媒体生成」里添加，只支持生图，设置页不再显示它们的视频选项；“测试连接”对 Gemini 改用 `x-goog-api-key`。适配器按各家官方文档实现，尚未用真实密钥实测。
 - 媒体生成新增两个套餐服务商，复用现有的火山方舟和百炼适配器，只是换了接入地址和模型清单：火山方舟 Agent Plan（`https://ark.cn-beijing.volces.com/api/plan/v3`，需 Agent Plan 专属 API Key；生图 `doubao-seedream-5-0-pro` / `doubao-seedream-5.0-flash`，生视频 Seedance 2.0 fast/mini/2.0/2.5，视频只有 Large、Max 档可用）、阿里云百炼 Token Plan（`https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1`，`sk-sp-` 开头的套餐 Key，仅北京地域；生图 `wan2.7-image-pro` / `wan2.7-image` / `qwen-image-3.0-pro`，生视频 `wan3.0-video` / `happyhorse-1.1-t2v`）。两家套餐条款都限定在 AI 编程或智能体工具里交互式使用。按官方文档实现，尚未用真实密钥实测。
+- 共享文件夹工具 `shared_file_put` / `shared_file_get` / `shared_file_list` / `shared_file_delete`：同一用户的专家通过 `~/.octop/users/<用户名>/shared/` 交接文件，按用户隔离；工具设置里新增“共享文件夹”分组。
+- 新增「推文配图专家」：搜索授权清楚的图片或调用生图模型给文章配图，登记在文章包的“配图单”里（不改初稿），导出预览 PDF；新增「共享文件夹管理员」：汇总和清理共享文件夹，删除前需用户确认。
+- 内容团队：几个热点或主题各出一篇文章（`article_pack.py batch`）；发布专员从共享文件夹取回配图并核对哈希。
 
 ### 修复
+- 十个专家模板的快捷提示卡片中英文字段放反（英文标题显示中文、中文副标题显示英文），已对调。
 - 火山方舟 Agent Plan 生图：不再发送 `sequential_image_generation` 和 `sequential_image_generation_options`（Plan 端点的 Seedream 5.0 遇到这两个字段的任何取值都会返回 400），一次生成多张图时改为逐张请求后合并；`doubao-seedream-5.0-*` 写法也按 Seedream 5 最小尺寸规则升到 `2K`。标准火山通道不变。
 
 ## [1.0.3b5] - 2026-11-11
