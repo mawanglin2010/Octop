@@ -1984,6 +1984,10 @@
     "mobile_launch_app": "Launch mobile app",
     "mobile_ui_dump": "Mobile UI dump",
     "mobile_handoff_to_user": "Hand off to user (mobile)",
+    "shared_file_put": "Put file in shared folder",
+    "shared_file_get": "Get file from shared folder",
+    "shared_file_list": "List shared folder",
+    "shared_file_delete": "Delete shared file",
     "read_env_file": "Read env file",
     "write_env_file": "Write env file",
     "ask_user_question": "Ask the user",
@@ -2024,6 +2028,7 @@
       "knowledge": "Knowledge base",
       "mobile": "Mobile",
       "teams": "Expert teams",
+      "shared": "Shared folder",
       "misc": "Other",
       "plugin": "Plugin tools"
     },

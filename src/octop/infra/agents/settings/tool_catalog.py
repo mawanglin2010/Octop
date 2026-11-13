@@ -98,6 +98,11 @@ BUILTIN_TOOL_CATALOG: tuple[BuiltinToolEntry, ...] = (
     BuiltinToolEntry("mobile_launch_app", "mobile"),
     BuiltinToolEntry("mobile_ui_dump", "mobile"),
     BuiltinToolEntry("mobile_handoff_to_user", "mobile"),
+    # fork: per-user shared folder (infra/agents/shared_files.py)
+    BuiltinToolEntry("shared_file_put", "shared"),
+    BuiltinToolEntry("shared_file_get", "shared"),
+    BuiltinToolEntry("shared_file_list", "shared"),
+    BuiltinToolEntry("shared_file_delete", "shared"),
     BuiltinToolEntry("agent_list", "teams"),
     BuiltinToolEntry("ask_agent", "teams"),
 )

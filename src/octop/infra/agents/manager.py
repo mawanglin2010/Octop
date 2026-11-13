@@ -4232,6 +4232,33 @@ class AgentManager:
                 workspace_for=_mobile_workspace_for,
             )
 
+        # fork: per-user shared folder so experts can hand files to each other.
+        shared_tools: list[Any] = []
+        if not team_host:
+            from octop.infra.agents.shared_files import build_shared_file_tools  # noqa: PLC0415
+
+            def _shared_workspace_for(agent_id: str) -> Any:
+                if self._harness_manager is not None:
+                    with suppress(Exception):
+                        return self._harness_manager.get_agent(agent_id).agent.workspace
+                return ws if agent_id == row.agent_id else None
+
+            def _shared_username_for(configurable: dict[str, Any]) -> str | None:
+                user_id: int | None = None
+                with suppress(TypeError, ValueError):
+                    user_id = int(configurable.get("user"))  # type: ignore[arg-type]
+                if user_id is None:
+                    owner = self._repos.agent_repo.get(str(configurable.get("agent_id") or ""))
+                    user_id = owner.user_id if owner is not None else None
+                user = self._repos.user_repo.get(user_id) if user_id is not None else None
+                return user.username if user is not None else None
+
+            shared_tools = build_shared_file_tools(
+                layout=self._paths,
+                username_for=_shared_username_for,
+                workspace_for=_shared_workspace_for,
+            )
+
         from octop_harness.plugins import PluginRegistry, build_plugin_tools  # noqa: PLC0415
 
         from octop.infra.agents.plugins.plugin_tool_defaults import (  # noqa: PLC0415
@@ -4276,7 +4303,7 @@ class AgentManager:
             plugin_tools,
             reserved={
                 str(getattr(t, "name", ""))
-                for t in [*(cron_tools or []), *knowledge_tools, *mobile_tools]
+                for t in [*(cron_tools or []), *knowledge_tools, *mobile_tools, *shared_tools]
             },
         )
         self._plugin_tool_labels[row.agent_id] = {
@@ -4340,6 +4367,7 @@ class AgentManager:
             merged_tools.extend(cron_tools)
         merged_tools.extend(knowledge_tools)
         merged_tools.extend(mobile_tools)
+        merged_tools.extend(shared_tools)  # fork
         merged_tools.extend(plugin_tools)
         # agent_list / ask_agent: PeerAgentMiddleware (team_enabled=True), not config.tools.
 
