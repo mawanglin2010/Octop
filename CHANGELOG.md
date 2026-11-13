@@ -11,7 +11,7 @@
 - 媒体生成新增两个套餐服务商，复用现有的火山方舟和百炼适配器，只是换了接入地址和模型清单：火山方舟 Agent Plan（`https://ark.cn-beijing.volces.com/api/plan/v3`，需 Agent Plan 专属 API Key；生图 `doubao-seedream-5-0-pro` / `doubao-seedream-5.0-flash`，生视频 Seedance 2.0 fast/mini/2.0/2.5，视频只有 Large、Max 档可用）、阿里云百炼 Token Plan（`https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1`，`sk-sp-` 开头的套餐 Key，仅北京地域；生图 `wan2.7-image-pro` / `wan2.7-image` / `qwen-image-3.0-pro`，生视频 `wan3.0-video` / `happyhorse-1.1-t2v`）。两家套餐条款都限定在 AI 编程或智能体工具里交互式使用。按官方文档实现，尚未用真实密钥实测。
 
 ### 修复
-- 火山方舟 Agent Plan 生图：单图请求不再发送 `sequential_image_generation`（Plan 端点的 `doubao-seedream-5.0-flash` 遇到该字段会返回 400），`doubao-seedream-5.0-*` 写法也按 Seedream 5 最小尺寸规则升到 `2K`。标准火山通道不变。
+- 火山方舟 Agent Plan 生图：不再发送 `sequential_image_generation` 和 `sequential_image_generation_options`（Plan 端点的 Seedream 5.0 遇到这两个字段的任何取值都会返回 400），一次生成多张图时改为逐张请求后合并；`doubao-seedream-5.0-*` 写法也按 Seedream 5 最小尺寸规则升到 `2K`。标准火山通道不变。
 
 ## [1.0.3b5] - 2026-11-11
 
