@@ -37,6 +37,7 @@ const CATEGORY_ORDER = [
   "knowledge",
   "mobile",
   "teams",
+  "shared", // fork
   "misc",
 ] as const;
 
@@ -52,6 +53,7 @@ const CATEGORY_ACCENT: Record<string, string> = {
   knowledge: "#10B981",
   mobile: "#0EA5E9",
   teams: "#F97316",
+  shared: "#0891B2", // fork
   misc: "#64748B",
 };
 

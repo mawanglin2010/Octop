@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "分析样本",
-        "en": "内容和元数据"
+        "en": "Inspect samples"
       },
       "description": {
-        "zh": "Inspect samples",
+        "zh": "内容和元数据",
         "en": "Content & metadata"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "疑似抄袭",
-        "en": "相似度比对"
+        "en": "Copy check"
       },
       "description": {
-        "zh": "Copy check",
+        "zh": "相似度比对",
         "en": "Similarity"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "作品登记",
-        "en": "材料和流程"
+        "en": "Register a work"
       },
       "description": {
-        "zh": "Register a work",
+        "zh": "材料和流程",
         "en": "Materials & steps"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "软著材料",
-        "en": "源程序文档"
+        "en": "Software filing"
       },
       "description": {
-        "zh": "Software filing",
+        "zh": "源程序文档",
         "en": "Source deposit"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "生成存证",
-        "en": "作品指纹"
+        "en": "Evidence list"
       },
       "description": {
-        "zh": "Evidence list",
+        "zh": "作品指纹",
         "en": "Fingerprints"
       },
       "prompt": {
@@ -104,10 +104,10 @@
     {
       "title": {
         "zh": "政策解读",
-        "en": "法规和资助"
+        "en": "Policy"
       },
       "description": {
-        "zh": "Policy",
+        "zh": "法规和资助",
         "en": "Law & subsidies"
       },
       "prompt": {

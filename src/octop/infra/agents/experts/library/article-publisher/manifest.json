@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "存入草稿箱",
-        "en": "公众号"
+        "en": "Save to drafts"
       },
       "description": {
-        "zh": "Save to drafts",
+        "zh": "公众号",
         "en": "WeChat"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "发布前预检",
-        "en": "三道关"
+        "en": "Pre-publish check"
       },
       "description": {
-        "zh": "Pre-publish check",
+        "zh": "三道关",
         "en": "Three gates"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "检查公众号配置",
-        "en": "凭据和 IP 白名单"
+        "en": "Check the setup"
       },
       "description": {
-        "zh": "Check the setup",
+        "zh": "凭据和 IP 白名单",
         "en": "Credentials and IP allowlist"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "导出其他平台",
-        "en": "可复制的文本"
+        "en": "Export for other platforms"
       },
       "description": {
-        "zh": "Export for other platforms",
+        "zh": "可复制的文本",
         "en": "Copy-ready text"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "查发布台账",
-        "en": "是否发过"
+        "en": "Check the ledger"
       },
       "description": {
-        "zh": "Check the ledger",
+        "zh": "是否发过",
         "en": "Already published?"
       },
       "prompt": {
@@ -104,10 +104,10 @@
     {
       "title": {
         "zh": "处理发布失败",
-        "en": "看错误码"
+        "en": "Handle a failure"
       },
       "description": {
-        "zh": "Handle a failure",
+        "zh": "看错误码",
         "en": "Read the error"
       },
       "prompt": {

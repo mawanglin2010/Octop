@@ -33,6 +33,8 @@ EXPERTS = {
     "content-scout": ("内容采集员", {"topic-research", "source-pack"}),
     "fact-checker": ("内容核验员", {"fact-check", "review-report"}),
     "article-publisher": ("发布专员", {"publish-gate", "wechat-draft"}),
+    "article-illustrator": ("推文配图专家", {"image-sourcing", "figure-pack"}),
+    "shared-folder-keeper": ("共享文件夹管理员", {"shared-cleanup"}),
 }
 PACK_COPIES = [
     LIBRARY / "content-scout/skills/source-pack/scripts/article_pack.py",
@@ -40,6 +42,7 @@ PACK_COPIES = [
     LIBRARY / "article-publisher/skills/publish-gate/scripts/article_pack.py",
     LIBRARY / "article-publisher/skills/wechat-draft/scripts/article_pack.py",
     LIBRARY / "wechat-writer/skills/pack-writing/scripts/article_pack.py",
+    LIBRARY / "article-illustrator/skills/figure-pack/scripts/article_pack.py",
 ]
 CHECK_DIR = LIBRARY / "fact-checker/skills/fact-check/scripts"
 PACK = CHECK_DIR / "article_pack.py"
@@ -209,11 +212,12 @@ def test_shared_scripts_are_identical_copies() -> None:
     first = PACK_COPIES[0].read_bytes()
     for copy in PACK_COPIES[1:]:
         assert copy.read_bytes() == first, f"{copy} differs from {PACK_COPIES[0]}"
-    assert (
-        LIBRARY / "article-publisher/skills/wechat-draft/scripts/wechat_layout.py"
-    ).read_bytes() == (
-        LIBRARY / "wechat-writer/skills/wechat-layout/scripts/wechat_layout.py"
-    ).read_bytes()
+    layout = (LIBRARY / "wechat-writer/skills/wechat-layout/scripts/wechat_layout.py").read_bytes()
+    for copy in (
+        LIBRARY / "article-publisher/skills/wechat-draft/scripts/wechat_layout.py",
+        LIBRARY / "article-illustrator/skills/figure-pack/scripts/wechat_layout.py",
+    ):
+        assert copy.read_bytes() == layout, f"{copy} differs"
 
 
 def test_team_doc_and_guide_exist() -> None:
@@ -223,6 +227,9 @@ def test_team_doc_and_guide_exist() -> None:
         "fact-checker",
         "article-publisher",
         "wechat-writer",
+        "article-illustrator",
+        "shared-folder-keeper",
+        "一题一篇",
         "团队准则",
         "铁律",
     ):

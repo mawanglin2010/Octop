@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "收集线索",
-        "en": "按话题找出处"
+        "en": "Collect leads"
       },
       "description": {
-        "zh": "Collect leads",
+        "zh": "按话题找出处",
         "en": "Topic to sourced pack"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "评估热点",
-        "en": "能写不能写"
+        "en": "Assess a hot topic"
       },
       "description": {
-        "zh": "Assess a hot topic",
+        "zh": "能写不能写",
         "en": "Worth writing?"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "追溯出处",
-        "en": "找最早的来源"
+        "en": "Trace the source"
       },
       "description": {
-        "zh": "Trace the source",
+        "zh": "找最早的来源",
         "en": "Find the original"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "核对矛盾",
-        "en": "并排放两种说法"
+        "en": "Resolve conflicts"
       },
       "description": {
-        "zh": "Resolve conflicts",
+        "zh": "并排放两种说法",
         "en": "Side by side"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "整理线索包",
-        "en": "去重、查链接、排时间线"
+        "en": "Tidy a source pack"
       },
       "description": {
-        "zh": "Tidy a source pack",
+        "zh": "去重、查链接、排时间线",
         "en": "Dedupe, check links, timeline"
       },
       "prompt": {
@@ -104,10 +104,10 @@
     {
       "title": {
         "zh": "补充缺口",
-        "en": "核验员退回的"
+        "en": "Fill the gaps"
       },
       "description": {
-        "zh": "Fill the gaps",
+        "zh": "核验员退回的",
         "en": "Fact-checker sent it back"
       },
       "prompt": {

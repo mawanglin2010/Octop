@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "找竞品",
-        "en": "找全并分组"
+        "en": "Find competitors"
       },
       "description": {
-        "zh": "Find competitors",
+        "zh": "找全并分组",
         "en": "Map the landscape"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "深度分析",
-        "en": "完整报告"
+        "en": "Deep analysis"
       },
       "description": {
-        "zh": "Deep analysis",
+        "zh": "完整报告",
         "en": "Full report"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "用户口碑",
-        "en": "评论里的痛点"
+        "en": "User voice"
       },
       "description": {
-        "zh": "User voice",
+        "zh": "评论里的痛点",
         "en": "Pain points"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "定价对比",
-        "en": "套餐和价格"
+        "en": "Pricing"
       },
       "description": {
-        "zh": "Pricing",
+        "zh": "套餐和价格",
         "en": "Plans and prices"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "评分对比",
-        "en": "雷达图"
+        "en": "Scorecard"
       },
       "description": {
-        "zh": "Scorecard",
+        "zh": "雷达图",
         "en": "Radar chart"
       },
       "prompt": {
@@ -104,10 +104,10 @@
     {
       "title": {
         "zh": "动态监控",
-        "en": "竞品周报"
+        "en": "Watch"
       },
       "description": {
-        "zh": "Watch",
+        "zh": "竞品周报",
         "en": "Weekly brief"
       },
       "prompt": {

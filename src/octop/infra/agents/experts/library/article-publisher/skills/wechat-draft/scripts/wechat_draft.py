@@ -4,8 +4,10 @@
 Usage:
     python scripts/wechat_draft.py check [--online]                         检查环境变量；--online 试取一次 access_token
     python scripts/wechat_draft.py render 文章包.md -o 文章.html [--theme green|blue|orange] [--author 作者]
-    python scripts/wechat_draft.py draft 文章包.md --cover 封面.jpg --confirmed [--author 作者] [--theme green]
-                                   [--digest 摘要] [--comment] [--dry-run] [--image-dir 图片目录] [--ledger outputs/publish-ledger.csv]
+    python scripts/wechat_draft.py figures 文章包.md [--figures-dir shared]      列出配图的共享名，检查是否已取回、哈希是否一致
+    python scripts/wechat_draft.py draft 文章包.md --confirmed [--cover 封面.jpg] [--author 作者] [--theme green]
+                                   [--digest 摘要] [--comment] [--dry-run] [--image-dir 图片目录] [--figures-dir shared]
+                                   [--ledger outputs/publish-ledger.csv]
     python scripts/wechat_draft.py export 文章包.md --platform xiaohongshu|toutiao|plain -o 文本.txt
     python scripts/wechat_draft.py ledger list|check|add [--ledger 台账.csv] ...
 
@@ -16,7 +18,9 @@ Usage:
 draft 的流程：
     1. 把关：文章包结构无错误 + 核验结论“通过” + 初稿自核验后没改过 + 用户已明确确认（--confirmed）；任何一项不满足就拒绝；
     2. 同一份初稿（哈希相同）已经存过草稿时拒绝重复，除非 --force；
-    3. 渲染排版 HTML：去掉 [S1]、[推算] 标记，文末生成“参考来源”；
+    3. 渲染排版 HTML：去掉 [S1]、[推算] 标记，按“配图单”把配图插进正文（图片要先用 shared_file_get 取到
+       --figures-dir，默认 shared/<共享名>，哈希必须和配图单一致），文末生成“参考来源”和“图片来源”；
+       没给 --cover 时用配图单里位置为“封面”的图；
     4. 取 access_token → 上传封面 → 上传正文里的图片 → 新建草稿 → 写回文章包的“发布单”并记台账；
     --dry-run 只列出将要做的事，不联网、不写任何东西。
 接口细节按微信开放文档编写，没有用真实公众号验证；权限不足时给出处理办法（见 references/wechat-api.md）。
@@ -191,13 +195,38 @@ def clean_markers(text: str) -> str:
     return re.sub(r"\s+([。！？，；：、）])", r"\1", MARK_RE.sub("", text))
 
 
+def figure_path(fig: ap.Figure, figures_dir: Path) -> Path:
+    return figures_dir / fig.fields.get("共享名", "")
+
+
+def figure_problems(pack: ap.Pack, figures_dir: Path) -> list[str]:
+    """Figures that are missing locally or differ from what the illustrator registered."""
+    out = []
+    for fig in pack.figures():
+        path = figure_path(fig, figures_dir)
+        if not fig.fields.get("共享名"):
+            out.append(f"{fig.id} 没有共享名")
+        elif not path.is_file():
+            out.append(
+                f'{fig.id} 还没取回：调用 shared_file_get(name="{fig.fields["共享名"]}")，默认放到 {path}'
+            )
+        elif ap.file_hash(path.read_bytes()) != fig.fields.get("哈希"):
+            out.append(f"{fig.id} 的文件 {path} 和配图单登记的哈希不一致，不是预览时那张图")
+    return out
+
+
 def layout_markdown(
-    pack: ap.Pack, author: str, digest: str
+    pack: ap.Pack, author: str, digest: str, figures_dir: Path | None = None
 ) -> tuple[str, str, str, list[ap.Source]]:
     title, digest0, body = split_draft(pack.draft())
     digest = digest or digest0
     cited = {s.id: s for s in pack.sources()}
     used = [cited[i] for i in ap.citation_ids(pack.draft()) if i in cited]
+    figures = [f for f in pack.figures() if f.position != "封面"]
+    if figures_dir is not None and figures:
+        body = ap.illustrated_lines(
+            "\n".join(body), figures, lambda f: str(figure_path(f, figures_dir).resolve())
+        )
     lines = [clean_markers(line) for line in body]
     meta = ["---", f"标题：{title}"]
     if author:
@@ -211,13 +240,16 @@ def layout_markdown(
         for s in used:
             f = s.fields
             text += f"- {f.get('发布方', '')}《{f.get('标题', '')}》，{f.get('发布日期', '未知')}，{f.get('网址', '')}\n"
+    credits = ap.figure_credits(pack.figures()) if figures_dir is not None else []
+    if credits:
+        text += "\n## 图片来源\n\n" + "".join(f"- {c}\n" for c in credits)
     return title, digest, text, used
 
 
 def render_html(
-    pack: ap.Pack, theme: str, author: str, digest: str
+    pack: ap.Pack, theme: str, author: str, digest: str, figures_dir: Path | None = None
 ) -> tuple[str, str, str, list[ap.Source]]:
-    title, digest, md, used = layout_markdown(pack, author, digest)
+    title, digest, md, used = layout_markdown(pack, author, digest, figures_dir)
     with tempfile.TemporaryDirectory() as tmp:
         src, out = Path(tmp) / "a.md", Path(tmp) / "a.html"
         src.write_text(md, encoding="utf-8")
@@ -313,7 +345,15 @@ def cmd_render(a: argparse.Namespace) -> int:
     if "初稿" not in pack.sections:
         print("文章包里还没有初稿", file=sys.stderr)
         return 1
-    title, digest, content, used = render_html(pack, a.theme, a.author, a.digest)
+    fig_dir = Path(a.figures_dir) if pack.figures() else None
+    if fig_dir is not None:
+        problems = figure_problems(pack, fig_dir)
+        if problems:
+            print("配图没准备好：")
+            for x in problems:
+                print(f"- {x}")
+            return 3
+    title, digest, content, used = render_html(pack, a.theme, a.author, a.digest, fig_dir)
     out = Path(a.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(content, encoding="utf-8")
@@ -343,12 +383,27 @@ def cmd_draft(a: argparse.Namespace) -> int:
             f"这一版初稿（{draft_hash}）已经在 {prev['时间']} 存过草稿（media_id {prev['media_id']}），不重复提交；确需重来加 --force"
         )
         return 3
-    cover = Path(a.cover)
+    fig_dir = Path(a.figures_dir) if pack.figures() else None
+    if fig_dir is not None:
+        problems = figure_problems(pack, fig_dir)
+        if problems:
+            print("配图没准备好，不能存草稿：")
+            for x in problems:
+                print(f"- {x}")
+            return 3
+    covers = [f for f in pack.figures() if f.position == "封面"]
+    if a.cover:
+        cover = Path(a.cover)
+    elif covers and fig_dir is not None:
+        cover = figure_path(covers[0], fig_dir)
+    else:
+        print("没有封面：配图单里没有位置为“封面”的图，也没有给 --cover", file=sys.stderr)
+        return 1
     if not cover.is_file():
         print(f"找不到封面图：{cover}", file=sys.stderr)
         return 1
     base = Path(a.image_dir) if a.image_dir else path.resolve().parent
-    title, digest, content, used = render_html(pack, a.theme, a.author, a.digest)
+    title, digest, content, used = render_html(pack, a.theme, a.author, a.digest, fig_dir)
     images = image_sources(content)
     if not title:
         print("初稿没有标题", file=sys.stderr)
@@ -359,7 +414,7 @@ def cmd_draft(a: argparse.Namespace) -> int:
             f"- 标题：{title}（{len(title)} 字）；作者：{a.author or '（空）'}；摘要：{len(digest)} 字"
         )
         print(
-            f"- 封面：{cover}；正文 HTML {len(content)} 字符；图片 {len(images)} 张；参考来源 {len(used)} 条"
+            f"- 封面：{cover}；正文 HTML {len(content)} 字符；图片 {len(images)} 张（配图单 {len(pack.figures())} 张）；参考来源 {len(used)} 条"
         )
         print(
             f"- 接口：{api_base()}（stable_token → {'material/add_material' if a.cover_type == 'image' else 'material/add_material(thumb)'} → media/uploadimg → draft/add）"
@@ -445,6 +500,27 @@ def cmd_draft(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_figures(a: argparse.Namespace) -> int:
+    pack = ap.read_pack(Path(a.pack))
+    figures = pack.figures()
+    if not figures:
+        print("文章包里没有配图单：存草稿时要用 --cover 指定封面")
+        return 0
+    fig_dir = Path(a.figures_dir)
+    for fig in figures:
+        print(
+            f"- {fig.id}（{fig.position}，{fig.mode}）共享名 {fig.fields.get('共享名', '')} → {figure_path(fig, fig_dir)}"
+        )
+    problems = figure_problems(pack, fig_dir)
+    if problems:
+        print("还要处理：")
+        for x in problems:
+            print(f"- {x}")
+        return 3
+    print("配图都已取回，哈希和配图单一致")
+    return 0
+
+
 def cmd_export(a: argparse.Namespace) -> int:
     pack = ap.read_pack(Path(a.pack))
     if "初稿" not in pack.sections:
@@ -525,10 +601,11 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--theme", default="green", choices=["green", "blue", "orange"])
     r.add_argument("--author", default="")
     r.add_argument("--digest", default="")
+    r.add_argument("--figures-dir", default="shared")
     r.set_defaults(fn=cmd_render)
     d = sub.add_parser("draft")
     d.add_argument("pack")
-    d.add_argument("--cover", required=True)
+    d.add_argument("--cover", default="")
     d.add_argument("--cover-type", default="image", choices=["image", "thumb"])
     d.add_argument("--confirmed", action="store_true")
     d.add_argument("--author", default="")
@@ -538,8 +615,14 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--dry-run", action="store_true")
     d.add_argument("--force", action="store_true")
     d.add_argument("--image-dir")
+    d.add_argument("--figures-dir", default="shared", help="shared_file_get 取回配图的目录")
     d.add_argument("--ledger", default="outputs/publish-ledger.csv")
     d.set_defaults(fn=cmd_draft)
+    fg = sub.add_parser("figures")
+    fg.add_argument("pack")
+    fg.add_argument("--figures-dir", default="shared")
+    fg.set_defaults(fn=cmd_figures)
+
     e = sub.add_parser("export")
     e.add_argument("pack")
     e.add_argument("--platform", required=True, choices=["xiaohongshu", "toutiao", "plain"])

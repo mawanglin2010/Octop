@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "写口播",
-        "en": "3 个测试版本"
+        "en": "Write scripts"
       },
       "description": {
-        "zh": "Write scripts",
+        "zh": "3 个测试版本",
         "en": "3 test variants"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "提炼卖点",
-        "en": "能力变人话"
+        "en": "Selling points"
       },
       "description": {
-        "zh": "Selling points",
+        "zh": "能力变人话",
         "en": "Plain language"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "开头钩子",
-        "en": "前 3 秒"
+        "en": "Hooks"
       },
       "description": {
-        "zh": "Hooks",
+        "zh": "前 3 秒",
         "en": "First 3 seconds"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "合规检查",
-        "en": "防拒审"
+        "en": "Compliance"
       },
       "description": {
-        "zh": "Compliance",
+        "zh": "防拒审",
         "en": "Avoid rejection"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "测试矩阵",
-        "en": "素材命名"
+        "en": "Test matrix"
       },
       "description": {
-        "zh": "Test matrix",
+        "zh": "素材命名",
         "en": "Naming"
       },
       "prompt": {
@@ -104,10 +104,10 @@
     {
       "title": {
         "zh": "数据复盘",
-        "en": "放量还是关停"
+        "en": "Review data"
       },
       "description": {
-        "zh": "Review data",
+        "zh": "放量还是关停",
         "en": "Scale or stop"
       },
       "prompt": {

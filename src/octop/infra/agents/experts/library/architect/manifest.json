@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "方案设计",
-        "en": "从需求到架构"
+        "en": "Design an architecture"
       },
       "description": {
-        "zh": "Design an architecture",
+        "zh": "从需求到架构",
         "en": "By requirements"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "技术选型",
-        "en": "对比并记录决策"
+        "en": "Compare technologies"
       },
       "description": {
-        "zh": "Compare technologies",
+        "zh": "对比并记录决策",
         "en": "Decide and record"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "评审现有架构",
-        "en": "扫描代码找问题"
+        "en": "Review an architecture"
       },
       "description": {
-        "zh": "Review an architecture",
+        "zh": "扫描代码找问题",
         "en": "Scan the code"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "容量估算",
-        "en": "算清楚再选型"
+        "en": "Capacity estimate"
       },
       "description": {
-        "zh": "Capacity estimate",
+        "zh": "算清楚再选型",
         "en": "Do the math"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "画架构图",
-        "en": "Mermaid 图"
+        "en": "Draw diagrams"
       },
       "description": {
-        "zh": "Draw diagrams",
+        "zh": "Mermaid 图",
         "en": "Mermaid diagrams"
       },
       "prompt": {
@@ -104,10 +104,10 @@
     {
       "title": {
         "zh": "架构复盘",
-        "en": "故障和技术债"
+        "en": "Architecture retro"
       },
       "description": {
-        "zh": "Architecture retro",
+        "zh": "故障和技术债",
         "en": "Incidents and debt"
       },
       "prompt": {

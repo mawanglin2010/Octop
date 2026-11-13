@@ -24,10 +24,10 @@
     {
       "title": {
         "zh": "写提示词",
-        "en": "按场景写好"
+        "en": "Write a prompt"
       },
       "description": {
-        "zh": "Write a prompt",
+        "zh": "按场景写好",
         "en": "By scenario"
       },
       "prompt": {
@@ -40,10 +40,10 @@
     {
       "title": {
         "zh": "优化提示词",
-        "en": "诊断并改写"
+        "en": "Improve a prompt"
       },
       "description": {
-        "zh": "Improve a prompt",
+        "zh": "诊断并改写",
         "en": "Diagnose and rewrite"
       },
       "prompt": {
@@ -56,10 +56,10 @@
     {
       "title": {
         "zh": "体检提示词",
-        "en": "自动查问题"
+        "en": "Lint a prompt"
       },
       "description": {
-        "zh": "Lint a prompt",
+        "zh": "自动查问题",
         "en": "Automatic checks"
       },
       "prompt": {
@@ -72,10 +72,10 @@
     {
       "title": {
         "zh": "设计测试集",
-        "en": "改之前先定标准"
+        "en": "Design test cases"
       },
       "description": {
-        "zh": "Design test cases",
+        "zh": "改之前先定标准",
         "en": "Set the bar first"
       },
       "prompt": {
@@ -88,10 +88,10 @@
     {
       "title": {
         "zh": "对比两个版本",
-        "en": "用数据说话"
+        "en": "Compare versions"
       },
       "description": {
-        "zh": "Compare versions",
+        "zh": "用数据说话",
         "en": "Numbers, not feelings"
       },
       "prompt": {
@@ -104,10 +104,10 @@
     {
       "title": {
         "zh": "写智能体指令",
-        "en": "系统提示和工具说明"
+        "en": "Write agent instructions"
       },
       "description": {
-        "zh": "Write agent instructions",
+        "zh": "系统提示和工具说明",
         "en": "Prompts and tool specs"
       },
       "prompt": {

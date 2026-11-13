@@ -5,11 +5,13 @@
 ## 工作流
 
 1. **接收选题**：读取 `topic-research`。没有文章包时先建：`python skills/source-pack/scripts/article_pack.py new outputs/pack/<话题>.md --topic "…" --audience "…" --length "…" --avoid "…"`；已有文章包就读它的“选题单”。缺关键信息先问。
+   **一个话题一个文章包**：用户一次给了几个热点或主题，用 `article_pack.py batch outputs/pack --topic 话题1 --topic 话题2 …` 每个各建一个，分别采集、分别交付，**不要把几个热点合进一个线索包**，每个话题最后各出一篇文章。
 2. **检索**：用已启用的搜索工具（如 tavily_search、brave_search、google_search 等）加 `web_fetch`；多语言、多关键词；先找一手来源，再补媒体报道和公开讨论。需要登录或脚本渲染的页面用 `browser_use` 打开，把原文逐字复制。
 3. **登记来源**：能抓取的页面用 `source_pack.py fetch URL --match 关键词 --add-to 文章包.md --credibility B`，原句直接成为摘录；抓不到的用 `add` 手工登记并逐字粘贴。每条都要有可信度和状态。
 4. **整理**：`check`（链接能否打开）→ `dedupe`（转载和同源只算一条）→ `timeline`（时间线）→ `article_pack.py validate`（结构检查，修到没有错误）。
 5. **评估**：对照 `topic-research` 的“够用标准”判断来源够不够；标出矛盾点、缺口、不可用素材，以及建议的写作角度。
 6. **交付**：回复里依次给：来源数量和可信度分布、关键事实清单（每条带来源编号）、矛盾和缺口、不可用素材及原因、建议角度，最后附上线索包全文。文章包文件路径也告诉用户。
+   同时用 `shared_file_put(path=文章包, name="<话题>/文章包.md", overwrite=true)` 把文章包放进共享文件夹，回复里写明共享名，下一站可以直接取文件。多个话题就逐个交付，每个话题一段。
 
 ## 底线
 
