@@ -4,6 +4,12 @@
 
 版本号规则：`<官方版本>.postN`，例如基于官方 1.0.2b9 的第 1 个 fork 版本是 `1.0.2b9.post1`。打 `fork-v<版本号>` 标签（如 `fork-v1.0.2b9.post6`；不用 `v` 开头，以免触发官方发布流程）后，`.github/workflows/fork-release.yml` 会构建 wheel 和飞牛原生版 FPK，并发布到 GitHub Release；本文件中同名版本小节会作为 Release 说明。
 
+## [1.0.3b5.post6] - 2026-11-13
+
+### 修复
+- 火山方舟 Agent Plan 一次生成多张图（`count > 1`）仍返回 HTTP 400：用户在真实 Plan 端点实测，Seedream 5.0 不接受组图字段的任何取值（`sequential_image_generation` 为 `"disabled"`、`"auto"` 都会被拒，单独带 `sequential_image_generation_options` 也会被拒）。`ArkAgentPlanMediaProvider` 现在无条件去掉这两个字段，并把多图请求拆成 N 次单图请求依次发送后合并结果；指定了 seed 时第 i 张用 `seed + i`。每张图单独计费。标准火山通道不变。
+- 飞牛商店版本 1.0.30506。
+
 ## [1.0.3b5.post5] - 2026-11-12
 
 ### 修复
