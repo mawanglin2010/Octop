@@ -8,14 +8,16 @@
    - 消息里给了共享名（如 `<话题>/文章包.md`）：`shared_file_get(name=…, path="outputs/pack/<话题>.md")` 取回；
    - 只贴了文字：先 `python skills/figure-pack/scripts/article_pack.py new outputs/pack/<话题>.md --topic "…"`，再 `put 线索包 / 初稿 / 核验报告`（`--file -` 读标准输入）。
    - `article_pack.py show 文章包.md` 看核验结论：不是“通过”或已过期，先告诉主持人或用户，确认要先出预览再配图。
-2. **规划**（读取 `image-sourcing`）：`python skills/figure-pack/scripts/figures.py plan 文章包.md` 列出段落编号和小标题。定下封面 1 张、正文 2–4 张放在哪里、每张表达什么，以及每张先搜还是直接生成。
-3. **找图或生图**：
+2. **通读**（读取 `image-sourcing`）：先 `article_pack.py get 文章包.md 初稿` 把**全文**读完，再看选题单（读者、风格）和线索包里被引用来源的摘录。弄清文章的主线、每个小节在讲什么、读者最需要“看见”什么。
+3. **规划**：`python skills/figure-pack/scripts/figures.py plan 文章包.md` 列出段落编号和小标题。定下封面 1 张、正文 2–4 张放在哪里、每张要让读者看懂什么，以及先搜还是直接生成。然后用 `figures.py style 文章包.md "…"` 写下一句整篇统一的画面风格（画风、主色、光线、人物造型），后面每张图都用它。
+4. **逐个位置取上下文**：每张图动手前都跑 `figures.py context 文章包.md --pos 位置`（默认取锚点前后各 2 段，段落短或要更多背景时加 `--window 3`）。输出里有标题、所在小节、前后段落原文、引用来源的摘录、已有配图和提示词骨架。
+5. **找图或生图**：
    - 搜索：用已启用的搜索工具找候选，打开来源页确认授权和署名，再 `figures.py fetch 文章包.md --url 图片地址 --page 来源页 --credit 署名 --license 授权 --pos 位置 --caption 图注`；
-   - 生成：调用 `generate_image`（封面在提示词里写明横版 2.35:1 构图），拿到工作区里的图片路径后 `figures.py add 文章包.md --file 路径 --mode 生成 --prompt 提示词 --model 模型 --pos 位置 --caption 图注`，封面加 `--crop 2.35:1`。
-4. **检查**：`figures.py check 文章包.md`，修到没有错误；用 `read_file` 看一眼图片，确认画面和图注对得上、没有乱码文字和水印。
-5. **预览**：`python skills/figure-pack/scripts/preview_pdf.py 文章包.md --author 作者` 生成 `outputs/preview/<话题>.pdf`（同时有 .html）。能用 `send_file_to_user` 时把 PDF 发给用户；退出码 2 表示这台机器没装 Chromium，只有 HTML，告诉用户怎么打开，并提示到设置 → 浏览器里安装。
-6. **交接**：`figures.py share 文章包.md` 列出每张图的文件和共享名，逐个 `shared_file_put(path=文件, name=共享名, overwrite=true)`；再 `shared_file_put(path=文章包, name="<话题>/文章包.md", overwrite=true)`。
-7. **交付**：回复里给：每张图的位置、方式、来源或提示词、授权；预览 PDF 路径；文章包和图片的共享名；最后附配图单全文（`article_pack.py get 文章包.md 配图单`）。
+   - 生成：按提示词骨架逐条填写，**画面要点必须来自 context 给出的段落**，合成一段 80–200 字的提示词再调用 `generate_image`；正文配图把已生成的封面作为 `reference_images` 传入，保持画风和人物一致。拿到路径后 `figures.py add 文章包.md --file 路径 --mode 生成 --prompt 提示词 --model 模型 --pos 位置 --caption 图注`，封面加 `--crop 2.35:1`。
+6. **检查**：`figures.py check 文章包.md`，修到没有错误；用 `read_file` 逐张看图，对照 context 里的段落问自己：读者看到这张图，能不能想到这一段在讲什么？画面有没有乱码文字、水印、畸形的手和脸？对不上就改提示词重画（一个位置最多重试两次）。
+7. **预览**：`python skills/figure-pack/scripts/preview_pdf.py 文章包.md --author 作者` 生成 `outputs/preview/<话题>.pdf`（同时有 .html）。能用 `send_file_to_user` 时把 PDF 发给用户；退出码 2 表示这台机器没装 Chromium，只有 HTML，告诉用户怎么打开，并提示到设置 → 浏览器里安装。
+8. **交接**：`figures.py share 文章包.md` 列出每张图的文件和共享名，逐个 `shared_file_put(path=文件, name=共享名, overwrite=true)`；再 `shared_file_put(path=文章包, name="<话题>/文章包.md", overwrite=true)`。
+9. **交付**：回复里给：统一画面风格；每张图的位置、对应哪一段讲的什么、方式、来源或提示词、授权；预览 PDF 路径；文章包和图片的共享名；最后附配图单全文（`article_pack.py get 文章包.md 配图单`）。
 
 ## 底线
 

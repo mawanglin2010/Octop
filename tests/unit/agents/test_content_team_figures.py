@@ -349,3 +349,54 @@ def test_shared_report_groups_and_picks_old_files(tmp_path: Path) -> None:
     assert [f["name"] for f in jpg["files"]] == ["热点二/P1.jpg"]
     listing.write_text(json.dumps({"error": "no user"}), encoding="utf-8")
     assert _run(REPORT, listing).returncode == 1
+
+
+# ---------------------------------------------------------------- prompt context
+
+
+def test_style_is_stored_in_the_pack(tmp_path: Path) -> None:
+    pack = _variant(tmp_path)
+    assert "还没有设定" in _fig(pack, "style", cwd=tmp_path)[1]
+    rc, _ = _fig(pack, "style", "扁平插画，  蓝绿主色", cwd=tmp_path)
+    assert rc == 0
+    parsed = ap.parse_pack(pack.read_text(encoding="utf-8"))
+    assert parsed.front["figure-style"] == "扁平插画， 蓝绿主色"
+    assert parsed.draft() == ap.parse_pack(EXAMPLE.read_text(encoding="utf-8")).draft()
+    assert "已清除" in _fig(pack, "style", "", cwd=tmp_path)[1]
+    assert "figure-style" not in ap.parse_pack(pack.read_text(encoding="utf-8")).front
+
+
+def _context(pack: Path, pos: str, *extra: str, cwd: Path) -> dict:  # type: ignore[type-arg]
+    rc, out = _fig(pack, "context", "--pos", pos, "--json", *extra, cwd=cwd)
+    assert rc == 0, out
+    return json.loads(out)
+
+
+def test_context_reads_around_the_anchor(tmp_path: Path) -> None:
+    pack = _illustrated(tmp_path)
+    _fig(pack, "style", "扁平插画，蓝绿主色", cwd=tmp_path)
+    ctx = _context(pack, "第4段后", cwd=tmp_path)
+    assert [p["段"] for p in ctx["上下文段落"]] == [2, 3, 4, 5, 6]
+    assert [p["段"] for p in ctx["上下文段落"] if p["锚点"]] == [4]
+    assert ctx["所在小节"] == "规模有多大" and ctx["统一画面风格"] == "扁平插画，蓝绿主色"
+    assert ctx["读者"] and ctx["标题"].startswith("新建充电桩")
+    assert all("[S" not in p["原文"] for p in ctx["上下文段落"])  # citation marks stripped
+    assert {e["来源"] for e in ctx["相关来源摘录"]} >= {"S2"}
+    assert [f["编号"] for f in ctx["已有配图"]] == ["P1", "P2"]
+    assert any("扁平插画，蓝绿主色" in line for line in ctx["提示词骨架"])
+    narrow = _context(pack, "第4段后", "--window", "0", cwd=tmp_path)
+    assert [p["段"] for p in narrow["上下文段落"]] == [4]
+
+
+def test_context_for_cover_heading_and_bad_positions(tmp_path: Path) -> None:
+    pack = _variant(tmp_path)
+    cover = _context(pack, "封面", cwd=tmp_path)
+    assert [p["段"] for p in cover["上下文段落"]] == [1, 2, 3, 4]
+    assert len(cover["全文小标题"]) == 5 and any("2.35:1" in line for line in cover["提示词骨架"])
+    section = _context(pack, "「要等多久」后", "--window", "1", cwd=tmp_path)
+    assert section["所在小节"] == "要等多久"
+    assert [p["段"] for p in section["上下文段落"]] == [5, 6]
+    rc, out = _fig(pack, "context", "--pos", "第99段后", cwd=tmp_path)
+    assert rc == 1 and "超出范围" in out
+    text = _fig(pack, "context", "--pos", "第2段后", cwd=tmp_path)[1]
+    assert "◀ 图放在这一段后面" in text and "提示词骨架" in text
