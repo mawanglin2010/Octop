@@ -5,6 +5,10 @@
 
 Usage:
     python scripts/figures.py plan 文章包.md                       列出正文段落编号和小标题，给出配图建议
+    python scripts/figures.py style 文章包.md "扁平插画，蓝绿主色，柔和光线"   设定整篇统一的画面风格（不带文字只看）
+    python scripts/figures.py context 文章包.md --pos 第3段后 [--window 2] [--json]
+                                                                   取某个位置的上下文：读者和风格、标题、所在小节、
+                                                                   前后段落、引用来源的摘录、已有配图，并给出提示词骨架
     python scripts/figures.py add 文章包.md --file generated/images/x.jpg --pos 封面 --mode 生成 \\
         --caption 图注 --prompt 提示词 --model 模型                登记一张生成的图
     python scripts/figures.py fetch 文章包.md --url 图片地址 --page 来源页 --credit 署名 --license 授权 \\
@@ -27,6 +31,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import article_pack as ap  # noqa: E402
@@ -283,6 +288,200 @@ def cmd_share(a: argparse.Namespace) -> int:
     return 0
 
 
+PARA_LIMIT = 400
+EXCERPT_LIMIT = 160
+MARK_RE = re.compile(r"\[(?:S\d+(?:\s*[,，、]\s*S\d+)*|推算)\]")
+
+
+def clean(text: str) -> str:
+    return re.sub(r"\s+([。！？，；：、）])", r"\1", MARK_RE.sub("", text)).strip()
+
+
+def outline(draft: str) -> tuple[str, str, list[tuple[str, str]]]:
+    """(title, digest, [(section heading, paragraph)]) with paragraphs numbered as in positions."""
+    title, digest, rows = "", "", []
+    heading = ""
+    for line in draft.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if not title and re.match(r"^#\s+\S", s):
+            title = s.lstrip("# ").strip()
+            continue
+        if ap.REF_HEAD_RE.match(s):
+            break
+        m = re.match(r"^(?:摘要|导语)\s*[：:]\s*(.*)$", s)
+        if m:
+            digest = digest or m.group(1).strip()
+            continue
+        h = re.match(r"^#{2,6}\s+(.+?)\s*$", s)
+        if h:
+            heading = h.group(1).strip()
+            continue
+        if ap.SKIP_PARA_RE.match(s):
+            continue
+        rows.append((heading, s))
+    return title, digest, rows
+
+
+def brief_fields(pack: ap.Pack) -> dict[str, str]:
+    return ap.parse_fields(pack.sections.get("选题单", "").splitlines())
+
+
+def slot_context(pack: ap.Pack, pos: str, window: int) -> dict[str, Any]:
+    """Everything an image prompt for *pos* should draw on."""
+    draft = pack.draft()
+    title, digest, rows = outline(draft)
+    if pos == "封面":
+        picked = list(range(min(len(rows), 2 + window)))
+        section = ""
+    elif pos == "开头":
+        picked = list(range(min(len(rows), 1 + window)))
+        section = rows[0][0] if rows else ""
+    elif m := ap.POS_PARA_RE.match(pos):
+        n = int(m.group(1)) - 1
+        picked = [i for i in range(n - window, n + window + 1) if 0 <= i < len(rows)]
+        section = rows[n][0] if 0 <= n < len(rows) else ""
+    elif m := ap.POS_HEAD_RE.match(pos):
+        section = m.group(1).strip()
+        picked = [i for i, (h, _) in enumerate(rows) if h == section]
+        if picked:
+            after = [i for i in range(picked[-1] + 1, picked[-1] + 1 + window) if i < len(rows)]
+            picked = picked[: window * 2 + 2] + after[:1]
+    else:
+        raise SystemExit(f"位置“{pos}”应为 封面、开头、第N段后 或 「小标题」后")
+    anchor = None
+    if m := ap.POS_PARA_RE.match(pos):
+        anchor = int(m.group(1))
+    paras = [
+        {
+            "段": i + 1,
+            "小节": rows[i][0],
+            "锚点": anchor == i + 1,
+            "原文": clean(rows[i][1])[:PARA_LIMIT],
+        }
+        for i in picked
+    ]
+    cited = ap.citation_ids("\n".join(rows[i][1] for i in picked))
+    by_id = {src.id: src for src in pack.sources()}
+    excerpts = [
+        {
+            "来源": sid,
+            "标题": by_id[sid].fields.get("标题", ""),
+            "摘录": by_id[sid].excerpt.replace("\n", " ")[:EXCERPT_LIMIT],
+        }
+        for sid in cited
+        if sid in by_id and by_id[sid].excerpt
+    ]
+    brief = brief_fields(pack)
+    return {
+        "位置": pos,
+        "话题": pack.topic,
+        "读者": brief.get("读者", ""),
+        "风格要求": brief.get("风格", ""),
+        "统一画面风格": pack.front.get("figure-style", ""),
+        "标题": clean(title),
+        "摘要": clean(digest),
+        "全文小标题": [h for h in ap.headings(draft) if not ap.REF_HEAD_RE.match(f"## {h}")],
+        "所在小节": section,
+        "上下文段落": paras,
+        "相关来源摘录": excerpts,
+        "已有配图": [
+            {
+                "编号": f.id,
+                "位置": f.position,
+                "方式": f.mode,
+                "图注": f.fields.get("图注", ""),
+                "提示词": f.fields.get("提示词", ""),
+            }  # fmt: skip
+            for f in pack.figures()
+        ],
+    }
+
+
+def prompt_skeleton(ctx: dict[str, Any]) -> list[str]:
+    cover = ctx["位置"] == "封面"
+    style = ctx["统一画面风格"] or ctx["风格要求"] or "（先用 style 定下整篇统一的风格）"
+    return [
+        "1. 这张图要让读者一眼明白什么（一句话，必须来自上面的段落，不要泛泛的“科技感”“未来感”）：",
+        "2. 画面里的具体东西（2–4 个，用段落里出现的具体名词：地点、物件、人物身份、动作、时间）：",
+        "3. 场景和氛围（时间、天气、光线、情绪，要和段落的语气一致）：",
+        f"4. 统一风格：{style}",
+        "5. 构图："
+        + (
+            "横版宽幅 2.35:1，主体居中，左右留白，缩成 1:1 时主体仍完整"
+            if cover
+            else "横版 16:9，主体清晰，背景简洁"
+        ),  # fmt: skip
+        "6. 画面中不出现任何文字、数字、标志和水印；不出现真实人物的脸和商标",
+        "参考图：正文配图把已生成的封面作为 reference_images 传给 generate_image，保持人物、配色和画风一致",
+    ]
+
+
+def cmd_context(a: argparse.Namespace) -> int:
+    pack = ap.read_pack(Path(a.pack))
+    if not pack.draft():
+        print("文章包里还没有初稿", file=sys.stderr)
+        return 1
+    problem = ap.position_error(a.pos, pack.draft())
+    if problem:
+        print(problem, file=sys.stderr)
+        return 1
+    ctx = slot_context(pack, a.pos, max(0, a.window))
+    if a.json:
+        print(json.dumps({**ctx, "提示词骨架": prompt_skeleton(ctx)}, ensure_ascii=False, indent=2))
+        return 0
+    print(f"【位置】{a.pos}　【话题】{ctx['话题']}　【读者】{ctx['读者'] or '-'}")
+    print(f"【标题】{ctx['标题']}")
+    if ctx["摘要"]:
+        print(f"【摘要】{ctx['摘要']}")
+    print(
+        f"【风格】选题单：{ctx['风格要求'] or '-'}；统一画面风格：{ctx['统一画面风格'] or '未设定'}"
+    )
+    print(
+        "【全文结构】" + " → ".join(ctx["全文小标题"])
+        if ctx["全文小标题"]
+        else "【全文结构】无小标题"
+    )
+    if ctx["所在小节"]:
+        print(f"【所在小节】「{ctx['所在小节']}」")
+    print("【上下文段落】")
+    for p in ctx["上下文段落"]:
+        mark = "  ◀ 图放在这一段后面" if p["锚点"] else ""
+        print(f"  第{p['段']}段{('（' + p['小节'] + '）') if p['小节'] else ''}：{p['原文']}{mark}")
+    if ctx["相关来源摘录"]:
+        print("【相关来源摘录】（具体的地点、物件、数字背景可以从这里取，但画面里不写数字）")
+        for e in ctx["相关来源摘录"]:
+            print(f"  {e['来源']}《{e['标题']}》：{e['摘录']}")
+    if ctx["已有配图"]:
+        print("【已有配图】（不要重复同一个画面，风格保持一致）")
+        for f in ctx["已有配图"]:
+            print(f"  {f['编号']}（{f['位置']}，{f['方式']}）{f['图注']}")
+    print("【提示词骨架】逐条填好，合成一段提示词再调用 generate_image：")
+    for line in prompt_skeleton(ctx):
+        print(f"  {line}")
+    return 0
+
+
+def cmd_style(a: argparse.Namespace) -> int:
+    path = Path(a.pack)
+    pack = ap.read_pack(path)
+    if not pack.front:
+        print("目标文件不是文章包（缺少文件头）", file=sys.stderr)
+        return 1
+    if a.text is None:
+        print(pack.front.get("figure-style") or "还没有设定统一画面风格")
+        return 0
+    text = " ".join(a.text.split())
+    if not text:
+        pack.front.pop("figure-style", None)
+    else:
+        pack.front["figure-style"] = text
+    ap.write_pack(path, pack)
+    print(f"统一画面风格：{text or '已清除'}（每张生成图的提示词都要带上它）")
+    return 0
+
+
 def cmd_plan(a: argparse.Namespace) -> int:
     pack = ap.read_pack(Path(a.pack))
     draft = pack.draft()
@@ -302,6 +501,14 @@ def cmd_plan(a: argparse.Namespace) -> int:
     )
     if pack.figures():
         print("已登记：" + "，".join(f"{f.id}（{f.position}，{f.mode}）" for f in pack.figures()))
+    if not pack.front.get("figure-style"):
+        print(
+            "还没有统一画面风格：先读完全文，用 style 定下一句风格描述，再逐个位置用 context 取上下文写提示词"
+        )
+    else:
+        print(
+            f"统一画面风格：{pack.front['figure-style']}；每个位置先用 context 取上下文再写提示词"
+        )
     return 0
 
 
@@ -311,6 +518,16 @@ def build_parser() -> argparse.ArgumentParser:
     pl = sub.add_parser("plan")
     pl.add_argument("pack")
     pl.set_defaults(fn=cmd_plan)
+    st = sub.add_parser("style")
+    st.add_argument("pack")
+    st.add_argument("text", nargs="?")
+    st.set_defaults(fn=cmd_style)
+    cx = sub.add_parser("context")
+    cx.add_argument("pack")
+    cx.add_argument("--pos", required=True)
+    cx.add_argument("--window", type=int, default=2, help="锚点前后各取几段（默认 2）")
+    cx.add_argument("--json", action="store_true")
+    cx.set_defaults(fn=cmd_context)
     for name, fn in (("add", cmd_add), ("fetch", cmd_fetch)):
         s = sub.add_parser(name)
         s.add_argument("pack")

@@ -1,6 +1,6 @@
 ---
 name: figure-pack
-description: "登记配图和出预览：figures.py 列出初稿的段落编号和小标题并给出配图建议（plan）、登记生成的图（add，可按 2.35:1 等比例裁剪）、下载并登记搜索来的图（fetch，记录图片地址、来源页、署名、授权）、移除（remove）、检查配图单、图片文件和哈希（check）、列出要放进共享文件夹的文件（share）；preview_pdf.py 把初稿和配图排成预览页导出 PDF（附参考来源、图片来源和配图清单）。配图、出预览、交给发布专员时使用。"
+description: "登记配图和出预览：figures.py 列出初稿的段落编号和小标题并给出配图建议（plan）、设定整篇统一画面风格（style）、取某个位置的上下文和提示词骨架（context：标题、所在小节、前后段落、引用来源摘录、已有配图）、登记生成的图（add，可按 2.35:1 等比例裁剪）、下载并登记搜索来的图（fetch，记录图片地址、来源页、署名、授权）、移除（remove）、检查配图单、图片文件和哈希（check）、列出要放进共享文件夹的文件（share）；preview_pdf.py 把初稿和配图排成预览页导出 PDF（附参考来源、图片来源和配图清单）。配图、出预览、交给发布专员时使用。"
 metadata:
   octop:
     emoji: "🖼️"
@@ -33,7 +33,17 @@ python scripts/figures.py plan outputs/pack/充电桩补贴.md
 | `第3段后` | 第 3 个正文段落后面（编号以 plan 为准） |
 | `「补贴多少」后` | 这个小标题后面 |
 
-## 2. 登记
+## 2. 统一风格和逐个位置的上下文
+
+```bash
+python scripts/figures.py style 文章包.md "扁平插画，蓝绿主色，柔和自然光，人物用简化造型"   # 写进文章包，整篇共用
+python scripts/figures.py context 文章包.md --pos 第4段后            # 锚点前后各 2 段
+python scripts/figures.py context 文章包.md --pos "「要等多久」后" --window 3 --json
+```
+
+`context` 输出：读者和风格要求、统一画面风格、标题和摘要、全文小标题、所在小节、上下文段落原文（去掉来源标记，锚点段落有标记）、这些段落引用的来源摘录、已有配图，以及提示词骨架。封面取开头几段和全文结构，小标题位置取整个小节。每张图写提示词前都先跑一次。
+
+## 3. 登记
 
 ```bash
 # 生成的图：先调用 generate_image，拿到工作区里的路径
@@ -51,7 +61,7 @@ python scripts/figures.py fetch 文章包.md --url https://…/photo.jpg --page 
 - 只收 JPG、PNG、GIF、WebP，单张不超过 15 MB；
 - 生成的图，图注在预览和发布时自动加“（AI 生成）”。
 
-## 3. 检查
+## 4. 检查
 
 ```bash
 python scripts/figures.py check 文章包.md          # 退出码 3 表示有错误
@@ -59,7 +69,7 @@ python scripts/figures.py check 文章包.md          # 退出码 3 表示有错
 
 检查：必填项、位置是否存在、只能一张封面、搜索图的授权（“未知”“不明”直接判错）、网址格式、图片文件是否还在、内容是否和登记时一致（哈希）。图注里有数字会提示：图注只描述画面。
 
-## 4. 预览 PDF
+## 5. 预览 PDF
 
 ```bash
 python scripts/preview_pdf.py 文章包.md --author 小编 [--theme green] [-o outputs/preview/充电桩补贴.pdf]
@@ -70,7 +80,7 @@ python scripts/preview_pdf.py 文章包.md --author 小编 [--theme green] [-o o
 - PDF 用无头 Chromium 打印。退出码 2 表示没装 Chromium（设置 → 浏览器里安装），此时只有 HTML；
 - 机器上没有中文字体时会提示，PDF 里的中文可能是方框，HTML 不受影响。
 
-## 5. 交给发布专员
+## 6. 交给发布专员
 
 ```bash
 python scripts/figures.py share 文章包.md
