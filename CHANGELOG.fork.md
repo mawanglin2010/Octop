@@ -4,6 +4,14 @@
 
 版本号规则：`<官方版本>.postN`，例如基于官方 1.0.2b9 的第 1 个 fork 版本是 `1.0.2b9.post1`。打 `fork-v<版本号>` 标签（如 `fork-v1.0.2b9.post6`；不用 `v` 开头，以免触发官方发布流程）后，`.github/workflows/fork-release.yml` 会构建 wheel 和飞牛原生版 FPK，并发布到 GitHub Release；本文件中同名版本小节会作为 Release 说明。
 
+## [1.0.3b5.post11] - 2026-11-15
+
+### 变更
+- 合并官方 develop 至 ae8fc347（19 个提交）：知识库按库建实体关系图并用于检索、文档和文件夹可移到其他知识库；团队主持人派活的任务简报改走系统提示；管理后台可编辑进程配置并显示上次登录；新增 Helm chart 和同一 PostgreSQL 上的多副本部署；对话侧栏可直接新建专家并排序；新用户引导；Telegram 渠道接入主机策略和原生按钮；QQ 引用消息带入上下文；从专家市场创建时 `AGENTS.md` 不再被空占位覆盖；`docker/` 目录移到 `deploy/docker/`。详见官方 `CHANGELOG.md`。
+- 合并冲突：`manager.py` 同时保留 fork 的“推理用中文”中间件和官方新增的团队派活简报中间件。
+- 官方在 `pyproject.toml` 里临时把 `octop-gateway` 指向一个 git 提交（草稿，等 Gateway #44 发布）；打出来的 wheel 和飞牛包仍安装 PyPI 的 octop-gateway 1.0.3，官方新代码用到的接口 1.0.3 都有，Telegram 新功能可能要等网关正式发版才完整。
+- 飞牛商店版本 1.0.30511。
+
 ## [1.0.3b5.post10] - 2026-11-14
 
 ### 变更
