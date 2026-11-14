@@ -17,6 +17,15 @@ Usage:
     python scripts/figures.py check 文章包.md [--json]              检查配图单、文件是否存在、哈希是否一致
     python scripts/figures.py share 文章包.md [--json]              列出要用 shared_file_put 放进共享文件夹的文件
 
+    python scripts/figures.py prompt 文章包.md --pos 「要等多久」后 --role 衔接 --point 画面要点 \
+        --elements "元素1,元素2,元素3" [--scene 场景氛围]          按上下文拼出提示词，并检查元素都来自文章
+
+每张图都要说清“为什么放在这里”（add 时必填，check 会逐条核对）：
+    用途：点题（封面 / 开头，表现全文主旨）| 衔接（承上启下，画面同时有上文和下文的元素）| 说明（把所在段落讲的东西画出来）
+    画面要点：一句话，这张图让读者看懂什么          依据：从初稿逐字摘的原句，用「」括起，可多句
+    画面元素：画面里的具体人、物、场景，逗号分隔，每个都必须是文章或来源摘录里出现过的说法
+    画面描述：生成或找到图之后，看图写下画面里实际有什么（要能看到大部分画面元素）
+
 登记时图片复制到 images/<话题>/P<n>.<扩展名>，共享名是 <话题>/P<n>.<扩展名>。
 add / fetch 加 --crop 2.35:1 可按比例居中裁剪（公众号封面常用 2.35:1，需要 Pillow），裁剪后存为 JPG。
 Exit codes: 0 正常, 3 check 未通过, 1 输入错误。
@@ -131,6 +140,21 @@ def register(a: argparse.Namespace, data: bytes, origin: str, extra: dict[str, s
     if not a.caption.strip():
         print("图注不能为空：写清画面内容，不要写初稿里没有的事实", file=sys.stderr)
         return 1
+    grounding = {
+        "用途": a.role.strip(),
+        "画面要点": a.point.strip(),
+        "依据": a.basis.strip(),
+        "画面元素": "，".join(split_elements(a.elements)),
+        "画面描述": a.seen.strip(),
+    }
+    errors = [
+        m for lvl, m in grounding_problems(pack, a.pos, grounding, a.caption) if lvl == "error"
+    ]
+    if errors:
+        print("配图和上下文对不上，先改好再登记：", file=sys.stderr)
+        for m in errors:
+            print(f"- {m}", file=sys.stderr)
+        return 1
     figures = current(pack)
     fig_id = a.id or next_id(figures)
     if not re.fullmatch(r"P\d+", fig_id):
@@ -150,6 +174,7 @@ def register(a: argparse.Namespace, data: bytes, origin: str, extra: dict[str, s
         "共享名": f"{slug}/{fig_id}{ext}",
         "哈希": ap.file_hash(data),
         "图注": a.caption.strip(),
+        **grounding,
         **extra,
     }
     replaced = any(i == fig_id for i, _ in figures)
@@ -235,6 +260,10 @@ def check(pack: ap.Pack, base: Path) -> list[ap.Issue]:
         issues.append(ap.Issue("error", "配图单", "文章包里还没有配图单"))
         return issues
     for fig in pack.figures():
+        for lvl, msg in grounding_problems(
+            pack, fig.position, fig.fields, fig.fields.get("图注", "")
+        ):
+            issues.append(ap.Issue(lvl, fig.id, msg))
         rel = fig.fields.get("文件", "")
         if not rel:
             continue
@@ -374,8 +403,12 @@ def slot_context(pack: ap.Pack, pos: str, window: int) -> dict[str, Any]:
         if sid in by_id and by_id[sid].excerpt
     ]
     brief = brief_fields(pack)
+    before, after, before_name, after_name = sides(pack, pos)
     return {
         "位置": pos,
+        "建议用途": suggest_role(pack, pos),
+        "上文": {"范围": before_name, "原文": clean(before)[: PARA_LIMIT * 2]},
+        "下文": {"范围": after_name, "原文": clean(after)[: PARA_LIMIT * 2]},
         "话题": pack.topic,
         "读者": brief.get("读者", ""),
         "风格要求": brief.get("风格", ""),
@@ -399,10 +432,32 @@ def slot_context(pack: ap.Pack, pos: str, window: int) -> dict[str, Any]:
     }
 
 
+def suggest_role(pack: ap.Pack, pos: str) -> str:
+    if pos in ("封面", "开头"):
+        return "点题"
+    _title, _digest, rows = outline(pack.draft())
+    heads = [h for h, _ in rows]
+    if m := ap.POS_HEAD_RE.match(pos):
+        return "衔接" if heads and heads[0] != m.group(1).strip() else "说明"
+    if m := ap.POS_PARA_RE.match(pos):
+        n = int(m.group(1))
+        if n < len(rows) and heads[n - 1] != heads[n]:
+            return "衔接"
+    return "说明"
+
+
 def prompt_skeleton(ctx: dict[str, Any]) -> list[str]:
     cover = ctx["位置"] == "封面"
     style = ctx["统一画面风格"] or ctx["风格要求"] or "（先用 style 定下整篇统一的风格）"
+    role = ctx.get("建议用途", "说明")
+    duty = {
+        "点题": "点题：一张图说出全文主旨（看标题、摘要和开头），读者只看封面就知道这篇讲什么",
+        "衔接": f"衔接：承上启下，画面里既有上文（{ctx['上文']['范围']}）的东西，也有下文（{ctx['下文']['范围']}）的东西，"
+        "用前后景、左右构图或光线变化表现两者的联系",
+        "说明": "说明：把锚点段落讲的那件事画出来，读者看图就懂这一段",
+    }[role]
     return [
+        f"0. 用途（建议）：{duty}",
         "1. 这张图要让读者一眼明白什么（一句话，必须来自上面的段落，不要泛泛的“科技感”“未来感”）：",
         "2. 画面里的具体东西（2–4 个，用段落里出现的具体名词：地点、物件、人物身份、动作、时间）：",
         "3. 场景和氛围（时间、天气、光线、情绪，要和段落的语气一致）：",
@@ -415,6 +470,7 @@ def prompt_skeleton(ctx: dict[str, Any]) -> list[str]:
         ),  # fmt: skip
         "6. 画面中不出现任何文字、数字、标志和水印；不出现真实人物的脸和商标",
         "参考图：正文配图把已生成的封面作为 reference_images 传给 generate_image，保持人物、配色和画风一致",
+        "填好后用 figures.py prompt --role … --point … --elements … 拼出提示词（会检查元素是否都来自文章）",
     ]
 
 
@@ -431,7 +487,9 @@ def cmd_context(a: argparse.Namespace) -> int:
     if a.json:
         print(json.dumps({**ctx, "提示词骨架": prompt_skeleton(ctx)}, ensure_ascii=False, indent=2))
         return 0
-    print(f"【位置】{a.pos}　【话题】{ctx['话题']}　【读者】{ctx['读者'] or '-'}")
+    print(
+        f"【位置】{a.pos}　【建议用途】{ctx['建议用途']}　【话题】{ctx['话题']}　【读者】{ctx['读者'] or '-'}"
+    )
     print(f"【标题】{ctx['标题']}")
     if ctx["摘要"]:
         print(f"【摘要】{ctx['摘要']}")
@@ -449,6 +507,9 @@ def cmd_context(a: argparse.Namespace) -> int:
     for p in ctx["上下文段落"]:
         mark = "  ◀ 图放在这一段后面" if p["锚点"] else ""
         print(f"  第{p['段']}段{('（' + p['小节'] + '）') if p['小节'] else ''}：{p['原文']}{mark}")
+    if ctx["建议用途"] == "衔接":
+        print(f"【上文】{ctx['上文']['范围']}：{ctx['上文']['原文'][:200]}")
+        print(f"【下文】{ctx['下文']['范围']}：{ctx['下文']['原文'][:200]}")
     if ctx["相关来源摘录"]:
         print("【相关来源摘录】（具体的地点、物件、数字背景可以从这里取，但画面里不写数字）")
         for e in ctx["相关来源摘录"]:
@@ -482,6 +543,203 @@ def cmd_style(a: argparse.Namespace) -> int:
     return 0
 
 
+ROLES = ("点题", "衔接", "说明")
+QUOTE_RE = re.compile(r"「([^」]+)」")
+
+
+def flat(text: str) -> str:
+    """Draft text without citation marks and whitespace, for verbatim quote matching."""
+    return re.sub(r"\s+", "", MARK_RE.sub("", text))
+
+
+def split_elements(raw: str) -> list[str]:
+    return [x.strip() for x in re.split(r"[,，、;；]", raw or "") if x.strip()]
+
+
+def quotes(basis: str) -> list[str]:
+    found = QUOTE_RE.findall(basis or "")
+    return [q.strip() for q in (found or [basis or ""]) if q.strip()]
+
+
+def sides(pack: ap.Pack, pos: str) -> tuple[str, str, str, str]:
+    """(上文, 下文, 上文名, 下文名) around *pos*, used for 衔接 and 说明 checks."""
+    title, digest, rows = outline(pack.draft())
+    heads = [h for h, _ in rows]
+    if pos in ("封面", "开头"):
+        head = "\n".join([title, digest, *(t for _, t in rows[:2])])
+        return head, "\n".join(t for _, t in rows[2:4]), "标题和开头", "正文"
+    if m := ap.POS_HEAD_RE.match(pos):
+        h = m.group(1).strip()
+        idx = [i for i, x in enumerate(heads) if x == h]
+        if not idx:
+            return "", "", "", ""
+        first = idx[0]
+        prev_head = heads[first - 1] if first else ""
+        prev = [t for x, t in rows[:first] if x == prev_head][-3:]
+        nxt = [rows[i][1] for i in idx][:3]
+        return "\n".join(prev), "\n".join(nxt), f"「{prev_head or '开头'}」", f"「{h}」"
+    if m := ap.POS_PARA_RE.match(pos):
+        n = int(m.group(1)) - 1
+        if not 0 <= n < len(rows):
+            return "", "", "", ""
+        here = heads[n]
+        prev = [rows[i][1] for i in range(max(0, n - 2), n + 1)]
+        nxt = [rows[i][1] for i in range(n + 1, min(len(rows), n + 3))]
+        nxt_head = heads[n + 1] if n + 1 < len(rows) else ""
+        return (
+            "\n".join(prev),
+            "\n".join(nxt),
+            f"第{n + 1}段及之前" + (f"（「{here}」）" if here else ""),
+            f"第{n + 2}段起" + (f"（「{nxt_head}」）" if nxt_head and nxt_head != here else ""),
+        )
+    return "", "", "", ""
+
+
+def grounding_problems(
+    pack: ap.Pack, pos: str, f: dict[str, str], caption: str
+) -> list[tuple[str, str]]:
+    """Why a figure is not tied to its place in the article: (level, message) pairs."""
+    out: list[tuple[str, str]] = []
+    role, point = f.get("用途", ""), f.get("画面要点", "")
+    elements = split_elements(f.get("画面元素", ""))
+    seen = f.get("画面描述", "")
+    if role not in ROLES:
+        out.append(("error", f"用途应为 {'、'.join(ROLES)}（写明这张图是点题、衔接还是说明）"))
+    if not point:
+        out.append(("error", "缺少画面要点：一句话写清这张图让读者看懂什么"))
+    if not elements:
+        out.append(("error", "缺少画面元素：列出画面里的具体人、物、场景"))
+    if not seen:
+        out.append(("error", "缺少画面描述：看图后写下画面里实际有什么"))
+    if role == "点题" and pos not in ("封面", "开头"):
+        out.append(("warn", "点题图一般放在封面或开头；正文里的图更适合衔接或说明"))
+    if role == "衔接" and pos in ("封面", "开头"):
+        out.append(("error", "封面和开头没有上文，不能做衔接图"))
+    draft = flat(pack.draft())
+    pool = draft + flat("\n".join(s.excerpt for s in pack.sources()))
+    for e in elements:
+        if flat(e) not in pool:
+            out.append(("error", f"画面元素“{e}”在初稿和来源摘录里找不到：换成文中出现过的说法"))
+    qs = quotes(f.get("依据", ""))
+    if not qs:
+        out.append(("error", "缺少依据：从初稿逐字摘一两句原文，用「」括起"))
+    bad = [q for q in qs if flat(q) not in draft]
+    for q in bad:
+        out.append(("error", f"依据「{q}」不是初稿里的原文（要逐字摘，可以只摘半句）"))
+    if len(flat("".join(qs))) and all(len(flat(q)) < 6 for q in qs):
+        out.append(("warn", "依据太短：至少摘一句能说明画面的话"))
+    before, after, before_name, after_name = sides(pack, pos)
+    good = [q for q in qs if q not in bad]
+    if role == "衔接" and good:
+        if not any(flat(q) in flat(before) for q in good):
+            out.append(("error", f"衔接图的依据里没有上文（{before_name}）的原句"))
+        if not any(flat(q) in flat(after) for q in good):
+            out.append(("error", f"衔接图的依据里没有下文（{after_name}）的原句"))
+    if role == "衔接" and elements and before and after:
+        if not any(flat(e) in flat(before) for e in elements):
+            out.append(
+                (
+                    "error",
+                    f"衔接图的画面元素里没有上文（{before_name}）出现的东西：至少放一个上文里的人、物或场景",
+                )
+            )
+        if not any(flat(e) in flat(after) for e in elements):
+            out.append(
+                (
+                    "error",
+                    f"衔接图的画面元素里没有下文（{after_name}）出现的东西：至少放一个下文里的人、物或场景",
+                )
+            )
+    if role == "说明" and good and not any(flat(q) in flat(before + after) for q in good):
+        out.append(("warn", "说明图的依据不在所在段落附近，确认放的位置对不对"))
+    if role == "点题" and good:
+        title, digest, rows = outline(pack.draft())
+        lead = flat(
+            "\n".join([title, digest, *(t for _, t in rows[:2]), *(t for _, t in rows[-1:])])
+        )
+        if not any(flat(q) in lead for q in good):
+            out.append(("warn", "点题图的依据最好来自标题、摘要、开头或结尾"))
+    if seen and elements:
+        hit = [e for e in elements if flat(e) in flat(seen)]
+        if len(hit) * 2 < len(elements):
+            missing = "、".join(e for e in elements if e not in hit)
+            out.append(
+                ("error", f"画面描述里没看到：{missing}。图和计划对不上，改提示词重画或改画面元素")
+            )
+    if caption and elements and not any(flat(e) in flat(caption) for e in elements):
+        out.append(("warn", "图注里没有任何画面元素：图注要说清这张图和这一段的关系"))
+    return out
+
+
+def compose_prompt(
+    pack: ap.Pack, pos: str, role: str, point: str, elements: list[str], scene: str
+) -> str:
+    style = pack.front.get("figure-style") or brief_fields(pack).get("风格", "")
+    before, after, before_name, after_name = sides(pack, pos)
+    els = "、".join(elements)
+    if role == "点题":
+        lead = f"一张表现文章主旨的{'公众号封面' if pos == '封面' else '题图'}：{point}。画面主体：{els}。"
+    elif role == "衔接":
+        prev = [e for e in elements if flat(e) in flat(before)]
+        nxt = [e for e in elements if flat(e) in flat(after) and e not in prev]
+        lead = (
+            f"一张承上启下的配图，从{before_name}过渡到{after_name}：{point}。"
+            f"前景或画面一侧是{'、'.join(prev) or els}，另一侧或背景是{'、'.join(nxt) or els}，"
+            "用前后景、左右构图或光线变化表现两者的联系。"
+        )
+    else:
+        lead = f"一张解释正文的配图：{point}。画面里要清楚看到：{els}。"
+    comp = (
+        "横版宽幅 2.35:1 构图，主体居中，左右留白，缩成 1:1 时主体仍完整"
+        if pos == "封面"
+        else "横版 16:9 构图，主体清晰，背景简洁"
+    )
+    parts = [lead, scene.strip().rstrip("。") + "。" if scene.strip() else "", f"{style}。" if style else "", f"{comp}。",
+             "画面中不出现任何文字、数字、标志和水印，不出现真实人物的脸和商标。"]  # fmt: skip
+    return "".join(x for x in parts if x)
+
+
+def cmd_prompt(a: argparse.Namespace) -> int:
+    pack = ap.read_pack(Path(a.pack))
+    problem = ap.position_error(a.pos, pack.draft())
+    if problem:
+        print(problem, file=sys.stderr)
+        return 1
+    elements = split_elements(a.elements)
+    fields = {
+        "用途": a.role,
+        "画面要点": a.point,
+        "画面元素": "，".join(elements),
+        "依据": a.basis or "",
+        "画面描述": "-",
+    }
+    problems = [
+        (lvl, m)
+        for lvl, m in grounding_problems(pack, a.pos, fields, "")
+        if "画面描述" not in m and ("依据" not in m or a.basis)
+    ]
+    for lvl, m in problems:
+        print(f"[{'错误' if lvl == 'error' else '提示'}] {m}", file=sys.stderr)
+    if any(lvl == "error" for lvl, _ in problems):
+        return 1
+    text = compose_prompt(pack, a.pos, a.role, a.point.strip(), elements, a.scene)
+    if a.json:
+        print(
+            json.dumps(
+                {"提示词": text, "用途": a.role, "画面元素": elements}, ensure_ascii=False, indent=2
+            )
+        )
+        return 0
+    print(text)
+    print(
+        "\n下一步：用上面的提示词调用 generate_image；看图后写画面描述，再 add："
+        f'\n  figures.py add 文章包.md --file <图片> --mode 生成 --pos "{a.pos}" --role {a.role} '
+        f'--point "{a.point.strip()}" --elements "{"，".join(elements)}" --basis "「…」「…」" '
+        '--seen "<看图写下画面里实际有什么>" --prompt "<上面的提示词>" --model <模型> --caption <图注>'
+    )
+    return 0
+
+
 def cmd_plan(a: argparse.Namespace) -> int:
     pack = ap.read_pack(Path(a.pack))
     draft = pack.draft()
@@ -495,6 +753,10 @@ def cmd_plan(a: argparse.Namespace) -> int:
         print(f"  第{n}段：{text[:40]}{'…' if len(text) > 40 else ''}")
     for h in heads:
         print(f"  小标题：「{h}」")
+    print("建议方案（用途：点题 / 衔接 / 说明）：")
+    print("  封面：点题，表现全文主旨")
+    for h in heads[1:]:
+        print(f"  「{h}」后：衔接，承接上一节、引出这一节")
     body = max(1, min(len(heads) or (len(paras) + 3) // 4, 5))
     print(
         f"建议：封面 1 张（公众号封面约 2.35:1）；正文 {body} 张，放在小标题后或段落之间；不要连续两段都配图"
@@ -528,6 +790,16 @@ def build_parser() -> argparse.ArgumentParser:
     cx.add_argument("--window", type=int, default=2, help="锚点前后各取几段（默认 2）")
     cx.add_argument("--json", action="store_true")
     cx.set_defaults(fn=cmd_context)
+    pr = sub.add_parser("prompt")
+    pr.add_argument("pack")
+    pr.add_argument("--pos", required=True)
+    pr.add_argument("--role", required=True, choices=list(ROLES))
+    pr.add_argument("--point", required=True)
+    pr.add_argument("--elements", required=True)
+    pr.add_argument("--basis", default="")
+    pr.add_argument("--scene", default="")
+    pr.add_argument("--json", action="store_true")
+    pr.set_defaults(fn=cmd_prompt)
     for name, fn in (("add", cmd_add), ("fetch", cmd_fetch)):
         s = sub.add_parser(name)
         s.add_argument("pack")
@@ -547,6 +819,11 @@ def build_parser() -> argparse.ArgumentParser:
         s.add_argument("--license", default="")
         s.add_argument("--root", default="images", help="图片存放目录（相对当前目录）")
         s.add_argument("--crop", default="", help="按比例居中裁剪，如 2.35:1")
+        s.add_argument("--role", required=True, choices=list(ROLES), help="点题 / 衔接 / 说明")
+        s.add_argument("--point", required=True, help="画面要点：一句话")
+        s.add_argument("--basis", required=True, help="依据：初稿原句，用「」括起")
+        s.add_argument("--elements", required=True, help="画面元素，逗号分隔")
+        s.add_argument("--seen", required=True, help="画面描述：看图后写下画面里实际有什么")
         s.set_defaults(fn=fn)
     r = sub.add_parser("remove")
     r.add_argument("pack")
