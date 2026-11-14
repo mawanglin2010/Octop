@@ -64,6 +64,7 @@ import {
   Settings,
   Signpost,
   Trash2,
+  Waypoints,
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -80,6 +81,7 @@ import {
   type KnowledgeCapability,
   type KnowledgeRerankOptions,
   type KnowledgeDocument,
+  type KnowledgeGraphOptions,
   type KnowledgeOnnxModel,
 } from "../../api/modules/knowledgeBases";
 import {
@@ -125,15 +127,17 @@ import skillStyles from "../Agent/Skills/index.module.less";
 import { KnowledgeBaseAvatar } from "./knowledgeIcons";
 import {
   buildKnowledgeFileTree,
+  buildKnowledgeMoveTree,
   isDirectKnowledgeChild,
   joinKnowledgePath,
   KNOWLEDGE_DOC_TREE_ROOT,
-  canMoveKnowledgeEntryTo,
   knowledgeBasename,
   knowledgeBreadcrumb,
   knowledgeFileNameParts,
+  knowledgeMoveKey,
   shouldOpenKnowledgeFolder,
   type KnowledgeFileTreeNode,
+  type KnowledgeMoveTreeNode,
 } from "./knowledgeFolder";
 import { resolveKnowledgeDeepLink } from "./knowledgeDeepLink";
 import {
@@ -150,6 +154,7 @@ import {
 import TextDocumentEditorModal, {
   type TextDocumentFormat,
 } from "./TextDocumentEditorModal";
+import KnowledgeGraphModal from "./KnowledgeGraphModal";
 import styles from "./index.module.less";
 
 type BaseFormValues = {
@@ -229,6 +234,7 @@ function formatKnowledgeOwner(
 const FOLDER_ICON_COLOR = "#d97706";
 
 type DocTreeNode = TreeDataNode & { path: string; isDir: boolean };
+type MoveTreeNode = TreeDataNode & { kbId: string; path: string };
 
 function DocumentFormatIcon({
   filename,
@@ -311,7 +317,15 @@ export default function KnowledgeBasesPage() {
   );
   const [renameName, setRenameName] = useState("");
   const [moveTarget, setMoveTarget] = useState<KnowledgeDocument | null>(null);
-  const [moveDestination, setMoveDestination] = useState<string | null>(null);
+  const [moveDestination, setMoveDestination] = useState<{
+    kbId: string;
+    path: string;
+  } | null>(null);
+  /** Documents of the other writable bases, loaded when the move dialog opens. */
+  const [moveDocsByBase, setMoveDocsByBase] = useState<
+    Record<string, KnowledgeDocument[]>
+  >({});
+  const [moveLoading, setMoveLoading] = useState(false);
   const [moving, setMoving] = useState(false);
   const [capability, setCapability] = useState<KnowledgeCapability | null>(
     null,
@@ -356,6 +370,13 @@ export default function KnowledgeBasesPage() {
   const [ocrBackend, setOcrBackend] = useState<"onnx" | "remote">("onnx");
   const [ocrModel, setOcrModel] = useState<string>();
   const [ocrProviderId, setOcrProviderId] = useState<string>();
+  const [graphEnabledDraft, setGraphEnabledDraft] = useState(false);
+  const [graphProviderId, setGraphProviderId] = useState<string>();
+  const [graphModel, setGraphModel] = useState<string>();
+  const [graphProviders, setGraphProviders] = useState<
+    KnowledgeGraphOptions["remote"]
+  >([]);
+  const [graphOpen, setGraphOpen] = useState(false);
   const [ocrRemoteProviders, setOcrRemoteProviders] = useState<
     {
       provider_id: string;
@@ -803,16 +824,66 @@ export default function KnowledgeBasesPage() {
     return [root];
   }, [documents, t]);
 
-  /** The folder tree again, with the places `moveTarget` cannot go greyed out. */
+  /** Bases the user can write to, in list order: the places an entry can move to. */
+  const moveBases = useMemo(
+    () => bases.filter((base) => canManageKnowledgeBase(base, user)),
+    [bases, user],
+  );
+
+  /** Every writable base with its folders; where `moveTarget` cannot go is greyed out. */
+  const moveTree = useMemo(() => {
+    if (!moveTarget || !selected) return [];
+    return buildKnowledgeMoveTree(
+      moveBases,
+      { ...moveDocsByBase, [selected.id]: documents },
+      moveTarget,
+      selected.id,
+    );
+  }, [documents, moveBases, moveDocsByBase, moveTarget, selected]);
+
   const moveTreeData = useMemo(() => {
-    if (!moveTarget) return [];
-    const mark = (node: DocTreeNode): DocTreeNode => ({
-      ...node,
-      disabled: !canMoveKnowledgeEntryTo(moveTarget, node.path),
-      children: (node.children as DocTreeNode[] | undefined)?.map(mark),
+    const iconFor = (node: KnowledgeMoveTreeNode) => {
+      const base = node.path
+        ? null
+        : moveBases.find((row) => row.id === node.kbId);
+      return base ? (
+        <KnowledgeBaseAvatar
+          iconUrl={base.icon_url}
+          iconName={base.icon_name}
+          size={14}
+        />
+      ) : (
+        <Folder size={13} className={styles.docTreeFolderIcon} aria-hidden />
+      );
+    };
+    const toAntd = (node: KnowledgeMoveTreeNode): MoveTreeNode => ({
+      key: node.key,
+      kbId: node.kbId,
+      path: node.path,
+      disabled: node.disabled,
+      title: (
+        <span className={styles.docTreeNode}>
+          {iconFor(node)}
+          <span className={styles.docTreeName} title={node.name}>
+            {node.name}
+          </span>
+        </span>
+      ),
+      children: node.children.length ? node.children.map(toAntd) : undefined,
     });
-    return docTreeData.map(mark);
-  }, [docTreeData, moveTarget]);
+    return moveTree.map(toAntd);
+  }, [moveBases, moveTree]);
+
+  /** Open the current base fully; other bases show just their name until expanded. */
+  const moveExpandedKeys = useMemo(() => {
+    const keys: string[] = [];
+    const walk = (node: KnowledgeMoveTreeNode) => {
+      keys.push(node.key);
+      node.children.forEach(walk);
+    };
+    moveTree.filter((node) => node.kbId === selected?.id).forEach(walk);
+    return keys;
+  }, [moveTree, selected?.id]);
 
   const loadBases = useCallback(async () => {
     try {
@@ -896,6 +967,15 @@ export default function KnowledgeBasesPage() {
       message.error(apiErrorMessage(error, t("knowledgeBases.loadFailed"), t));
     }
   }, [t]);
+
+  const loadGraphOptions = useCallback(async () => {
+    try {
+      const options = await knowledgeBasesApi.getGraphOptions();
+      setGraphProviders(options.remote);
+    } catch (error) {
+      message.error(apiErrorMessage(error, t("knowledgeBases.loadFailed"), t));
+    }
+  }, [message, t]);
 
   const stopOnnxDownloadWatch = useCallback(() => {
     if (onnxDownloadTimer.current) {
@@ -1320,6 +1400,9 @@ export default function KnowledgeBasesPage() {
     if (rerankEnabledDraft && (!rerankProviderId || !rerankModel)) {
       return;
     }
+    if (graphEnabledDraft && (!graphProviderId || !graphModel)) {
+      return;
+    }
     if (
       featureBackend === "onnx" &&
       !catalog.find((model) => model.id === featureModel)?.downloaded
@@ -1364,6 +1447,9 @@ export default function KnowledgeBasesPage() {
         rerank_enabled: rerankEnabledDraft,
         rerank_provider_id: rerankProviderId ?? "",
         rerank_model: rerankModel ?? "",
+        graph_enabled: graphEnabledDraft,
+        graph_provider_id: graphProviderId ?? "",
+        graph_model: graphModel ?? "",
       });
       setCapability(next);
       setFeatureModalOpen(false);
@@ -1393,6 +1479,9 @@ export default function KnowledgeBasesPage() {
     setRerankEnabledDraft(Boolean(capability?.rerank?.enabled));
     setRerankProviderId(capability?.rerank?.provider_id || undefined);
     setRerankModel(capability?.rerank?.model || undefined);
+    setGraphEnabledDraft(Boolean(capability?.graph?.enabled));
+    setGraphProviderId(capability?.graph?.provider_id || undefined);
+    setGraphModel(capability?.graph?.model || undefined);
     setFeatureModalOpen(true);
     void (async () => {
       const options = await loadEmbeddingOptions(false);
@@ -1406,6 +1495,7 @@ export default function KnowledgeBasesPage() {
     })();
     void loadOcrOptions();
     void loadRerankOptions();
+    void loadGraphOptions();
     void knowledgeBasesApi.getOnnxDownloadStatus().then((state) => {
       if (state.status === "downloading" || state.status === "loading") {
         const modelId = state.model_name;
@@ -1669,9 +1759,25 @@ export default function KnowledgeBasesPage() {
     }
   };
 
-  const openMoveEntry = (document: KnowledgeDocument) => {
+  const openMoveEntry = async (document: KnowledgeDocument) => {
     setMoveTarget(document);
     setMoveDestination(null);
+    const others = moveBases.filter((base) => base.id !== selected?.id);
+    if (!others.length) {
+      setMoveDocsByBase({});
+      return;
+    }
+    setMoveLoading(true);
+    const loaded = await Promise.allSettled(
+      others.map((base) => knowledgeBasesApi.listDocuments(base.id)),
+    );
+    const byBase: Record<string, KnowledgeDocument[]> = {};
+    loaded.forEach((result, index) => {
+      if (result.status === "fulfilled")
+        byBase[others[index].id] = result.value;
+    });
+    setMoveDocsByBase(byBase);
+    setMoveLoading(false);
   };
 
   const moveEntry = async () => {
@@ -1681,11 +1787,20 @@ export default function KnowledgeBasesPage() {
       await knowledgeBasesApi.moveDocument(
         selected.id,
         moveTarget.id,
-        moveDestination,
+        moveDestination.path,
+        moveDestination.kbId,
       );
       setMoveTarget(null);
       await loadDetail(selected.id);
-      message.success(t("knowledgeBases.moveSuccess"));
+      const destBase = bases.find((base) => base.id === moveDestination.kbId);
+      if (destBase && destBase.id !== selected.id) {
+        await loadBases();
+        message.success(
+          t("knowledgeBases.moveSuccessTo", { name: destBase.name }),
+        );
+      } else {
+        message.success(t("knowledgeBases.moveSuccess"));
+      }
     } catch (error) {
       message.error(apiErrorMessage(error, t("knowledgeBases.moveFailed"), t));
     } finally {
@@ -2109,7 +2224,7 @@ export default function KnowledgeBasesPage() {
                 aria-label={t("knowledgeBases.moveEntry")}
                 onClick={(event) => {
                   event.stopPropagation();
-                  openMoveEntry(document);
+                  void openMoveEntry(document);
                 }}
               />
             </Tooltip>
@@ -2644,6 +2759,14 @@ export default function KnowledgeBasesPage() {
                           void uploadDocuments(event.target.files)
                         }
                       />
+                      {capability?.graph?.enabled ? (
+                        <Button
+                          icon={<Waypoints size={14} />}
+                          onClick={() => setGraphOpen(true)}
+                        >
+                          {t("knowledgeBases.graphOpen")}
+                        </Button>
+                      ) : null}
                       {canWriteSelected ? (
                         <Button
                           icon={<FolderPlus size={14} />}
@@ -2678,7 +2801,9 @@ export default function KnowledgeBasesPage() {
                     </div>
                   </div>
                   <div className={styles.docsPathRow}>
-                    <span className={skillStyles.gridCount}>
+                    <span
+                      className={cx(skillStyles.gridCount, styles.docsCount)}
+                    >
                       {documentCap === null
                         ? t("knowledgeBases.documentCount", {
                             count: fileCount,
@@ -2944,16 +3069,24 @@ export default function KnowledgeBasesPage() {
                                             },
                                           )}`}
                                     </div>
+                                    {document.is_dir ? null : (
+                                      <div
+                                        className={styles.docCardMeta}
+                                        title={formatServerDateTime(
+                                          document.updated_at,
+                                          timeZone,
+                                        )}
+                                      >
+                                        {formatServerDateTime(
+                                          document.updated_at,
+                                          timeZone,
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
-                                  <span
-                                    data-kb-doc-actions=""
-                                    onClick={(event) => event.stopPropagation()}
-                                  >
-                                    {renderDocumentActions(document)}
-                                  </span>
                                 </div>
-                                {document.is_dir ? null : (
-                                  <div className={styles.docCardFooter}>
+                                <div className={styles.docCardFooter}>
+                                  {document.is_dir ? null : (
                                     <Tooltip
                                       title={
                                         document.error_message ||
@@ -2973,20 +3106,15 @@ export default function KnowledgeBasesPage() {
                                         )}
                                       </Tag>
                                     </Tooltip>
-                                    <span
-                                      className={styles.docUpdatedAt}
-                                      title={formatServerDateTime(
-                                        document.updated_at,
-                                        timeZone,
-                                      )}
-                                    >
-                                      {formatServerDateTime(
-                                        document.updated_at,
-                                        timeZone,
-                                      )}
-                                    </span>
-                                  </div>
-                                )}
+                                  )}
+                                  <span
+                                    className={styles.docCardFooterActions}
+                                    data-kb-doc-actions=""
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
+                                    {renderDocumentActions(document)}
+                                  </span>
+                                </div>
                               </div>
                             );
                           })}
@@ -3570,21 +3698,33 @@ export default function KnowledgeBasesPage() {
       >
         <p className={styles.moveHint}>{t("knowledgeBases.moveHint")}</p>
         <div className={styles.moveTree}>
-          <Tree
-            blockNode
-            defaultExpandAll
-            treeData={moveTreeData}
-            selectedKeys={
-              moveDestination === null
-                ? []
-                : [moveDestination || KNOWLEDGE_DOC_TREE_ROOT]
-            }
-            onSelect={(_keys, info) => {
-              setMoveDestination(
-                info.selected ? (info.node as DocTreeNode).path : null,
-              );
-            }}
-          />
+          {moveLoading ? (
+            <div className={styles.centered}>
+              <Spin />
+            </div>
+          ) : (
+            <Tree
+              blockNode
+              defaultExpandedKeys={moveExpandedKeys}
+              treeData={moveTreeData}
+              selectedKeys={
+                moveDestination === null
+                  ? []
+                  : [
+                      knowledgeMoveKey(
+                        moveDestination.kbId,
+                        moveDestination.path,
+                      ),
+                    ]
+              }
+              onSelect={(_keys, info) => {
+                const node = info.node as MoveTreeNode;
+                setMoveDestination(
+                  info.selected ? { kbId: node.kbId, path: node.path } : null,
+                );
+              }}
+            />
+          )}
         </div>
       </Modal>
 
@@ -4072,20 +4212,22 @@ export default function KnowledgeBasesPage() {
                 {t("knowledgeBases.manageModels")}
               </Typography.Link>
               <div className={styles.ocrSettings}>
-                <div className={styles.formOptionRow}>
-                  <div className={styles.formOptionCopy}>
-                    <span className={styles.switchLabel}>
-                      {t("knowledgeBases.ocrTitle")}
-                    </span>
-                    <span className={styles.formOptionHint}>
-                      {t("knowledgeBases.ocrDescription")}
-                    </span>
+                <div className={styles.formOptions}>
+                  <div className={styles.formOptionRow}>
+                    <div className={styles.formOptionCopy}>
+                      <span className={styles.switchLabel}>
+                        {t("knowledgeBases.ocrTitle")}
+                      </span>
+                      <span className={styles.formOptionHint}>
+                        {t("knowledgeBases.ocrDescription")}
+                      </span>
+                    </div>
+                    <Switch
+                      size="small"
+                      checked={ocrEnabledDraft}
+                      onChange={setOcrEnabledDraft}
+                    />
                   </div>
-                  <Switch
-                    size="small"
-                    checked={ocrEnabledDraft}
-                    onChange={setOcrEnabledDraft}
-                  />
                 </div>
                 {ocrEnabledDraft ? (
                   <div className={styles.featureFields}>
@@ -4164,20 +4306,22 @@ export default function KnowledgeBasesPage() {
                 ) : null}
               </div>
               <div className={styles.ocrSettings}>
-                <div className={styles.formOptionRow}>
-                  <div className={styles.formOptionCopy}>
-                    <span className={styles.switchLabel}>
-                      {t("knowledgeBases.rerankTitle")}
-                    </span>
-                    <span className={styles.formOptionHint}>
-                      {t("knowledgeBases.rerankDescription")}
-                    </span>
+                <div className={styles.formOptions}>
+                  <div className={styles.formOptionRow}>
+                    <div className={styles.formOptionCopy}>
+                      <span className={styles.switchLabel}>
+                        {t("knowledgeBases.rerankTitle")}
+                      </span>
+                      <span className={styles.formOptionHint}>
+                        {t("knowledgeBases.rerankDescription")}
+                      </span>
+                    </div>
+                    <Switch
+                      size="small"
+                      checked={rerankEnabledDraft}
+                      onChange={setRerankEnabledDraft}
+                    />
                   </div>
-                  <Switch
-                    size="small"
-                    checked={rerankEnabledDraft}
-                    onChange={setRerankEnabledDraft}
-                  />
                 </div>
                 {rerankEnabledDraft ? (
                   <div className={styles.featureFields}>
@@ -4215,10 +4359,97 @@ export default function KnowledgeBasesPage() {
                   </div>
                 ) : null}
               </div>
+              <div className={styles.ocrSettings}>
+                <div className={styles.formOptions}>
+                  <div className={styles.formOptionRow}>
+                    <div className={styles.formOptionCopy}>
+                      <span className={styles.switchLabel}>
+                        {t("knowledgeBases.graphSettingsTitle")}
+                      </span>
+                      <span className={styles.formOptionHint}>
+                        {t("knowledgeBases.graphSettingsDescription")}
+                      </span>
+                    </div>
+                    <Switch
+                      size="small"
+                      checked={graphEnabledDraft}
+                      onChange={setGraphEnabledDraft}
+                    />
+                  </div>
+                </div>
+                {graphEnabledDraft ? (
+                  <div className={styles.featureFields}>
+                    <div className={styles.settingsFieldLabel}>
+                      {t("knowledgeBases.graphModelLabel")}
+                    </div>
+                    <Select
+                      value={graphProviderId}
+                      onChange={(id) => {
+                        setGraphProviderId(id);
+                        setGraphModel(undefined);
+                      }}
+                      placeholder={t("knowledgeBases.selectProvider")}
+                      options={graphProviders.map((provider) => ({
+                        value: provider.provider_id,
+                        label: provider.provider_name,
+                      }))}
+                      notFoundContent={t("knowledgeBases.graphNoProviders")}
+                    />
+                    <div className={styles.onnxModelList}>
+                      {(
+                        graphProviders.find(
+                          (provider) =>
+                            provider.provider_id === graphProviderId,
+                        )?.models ?? []
+                      ).map((model) => (
+                        <button
+                          key={model.id}
+                          type="button"
+                          className={cx(
+                            styles.onnxModelItem,
+                            graphModel === model.id &&
+                              styles.onnxModelItemActive,
+                          )}
+                          aria-pressed={graphModel === model.id}
+                          onClick={() => setGraphModel(model.id)}
+                        >
+                          <span className={styles.onnxModelName}>
+                            {model.name}
+                          </span>
+                        </button>
+                      ))}
+                      {graphProviderId &&
+                      (graphProviders.find(
+                        (provider) => provider.provider_id === graphProviderId,
+                      )?.models.length ?? 0) === 0 ? (
+                        <Typography.Text
+                          type="secondary"
+                          className={styles.settingsHint}
+                        >
+                          {t("knowledgeBases.graphNoModels")}
+                        </Typography.Text>
+                      ) : null}
+                    </div>
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message={t("knowledgeBases.graphSettingsPrivacy")}
+                    />
+                  </div>
+                ) : null}
+              </div>
             </div>
           </Spin>
         ) : null}
       </Drawer>
+      <KnowledgeGraphModal
+        open={graphOpen}
+        kbId={selected?.id ?? null}
+        kbName={selected?.name ?? ""}
+        canWrite={canWriteSelected}
+        canBuild={Boolean(capability?.graph?.usable)}
+        onClose={() => setGraphOpen(false)}
+      />
       <Modal
         open={downloadProgressOpen}
         title={t("models.localDownloadProgressTitle")}
