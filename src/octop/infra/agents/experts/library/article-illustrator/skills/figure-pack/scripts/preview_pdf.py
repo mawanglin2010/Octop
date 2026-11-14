@@ -52,7 +52,7 @@ PAGE = """<!doctype html>
   .appendix li {{ margin:2px 0; word-break:break-all; }}
   table {{ border-collapse:collapse; width:100%; }}
   td, th {{ border:1px solid #ddd; padding:4px 6px; text-align:left; vertical-align:top; }}
-  td:nth-child(-n+3), th:nth-child(-n+3) {{ white-space:nowrap; }}
+  td:nth-child(-n+3), th:nth-child(-n+3), td:nth-child(5), th:nth-child(5) {{ white-space:nowrap; }}
 </style></head>
 <body><div class="doc">
 <div class="stamp">预览稿，未发布 · 生成于 {now} · 核验结论：{verdict}</div>
@@ -140,6 +140,8 @@ def build_html(pack: ap.Pack, base: Path, theme: str, author: str) -> tuple[str,
                 for v in (
                     f.id,
                     f.position,
+                    f.fields.get("用途", ""),
+                    f.fields.get("画面要点", ""),
                     f.mode,
                     f.fields.get("授权") or f.fields.get("模型", ""),
                     f.fields.get("共享名", ""),
@@ -149,7 +151,7 @@ def build_html(pack: ap.Pack, base: Path, theme: str, author: str) -> tuple[str,
             for f in figures
         )
         parts.append(
-            "<h2>配图清单</h2><table><tr><th>编号</th><th>位置</th><th>方式</th>"
+            "<h2>配图清单</h2><table><tr><th>编号</th><th>位置</th><th>用途</th><th>画面要点</th><th>方式</th>"
             f"<th>授权 / 模型</th><th>共享名</th></tr>{rows}</table>"
         )
     verdict = ap.report_fields(pack).get("结论") or "未核验"

@@ -45,6 +45,14 @@ def _fig(pack: Path, *args: str | Path, cwd: Path) -> tuple[int, str]:
     return proc.returncode, proc.stdout + proc.stderr
 
 
+COVER_WHY = ["--role", "点题", "--point", "新建充电桩按功率领补贴", "--elements", "公共充电桩",
+             "--basis", "「新建充电桩每千瓦补贴300元」", "--seen", "城市街头一排崭新的公共充电桩"]  # fmt: skip
+INLINE_WHY = ["--role", "说明", "--point", "直流快充桩按千瓦补贴", "--elements", "直流快充桩",
+              "--basis", "「直流快充桩每千瓦补贴300元」", "--seen", "停车位旁的一台直流快充桩"]  # fmt: skip
+P1_WHY = ["--role", "说明", "--point", "新桩可以领补贴", "--elements", "公共充电桩",
+          "--basis", "「新建的公共充电桩」", "--seen", "路边新装的公共充电桩"]  # fmt: skip
+
+
 def _illustrated(tmp: Path) -> Path:
     """Example pack (review passed) plus a generated cover and a searched inline figure."""
     pack = _variant(tmp)
@@ -52,13 +60,13 @@ def _illustrated(tmp: Path) -> Path:
     (tmp / "gen/cover.jpg").write_bytes(_jpeg((1024, 1024)))
     (tmp / "gen/body.jpg").write_bytes(_jpeg(color=(200, 120, 30)))
     rc, out = _fig(pack, "add", "--file", "gen/cover.jpg", "--mode", "生成", "--pos", "封面",
-                   "--caption", "城市街头的充电桩", "--prompt", "充电桩，扁平插画", "--model", "seedream",
-                   "--crop", "2.35:1", cwd=tmp)  # fmt: skip
+                   "--caption", "城市街头的公共充电桩", "--prompt", "充电桩，扁平插画", "--model", "seedream",
+                   "--crop", "2.35:1", *COVER_WHY, cwd=tmp)  # fmt: skip
     assert rc == 0, out
     rc, out = _fig(pack, "add", "--file", "gen/body.jpg", "--mode", "搜索", "--pos", "「补贴多少」后",
-                   "--caption", "充电站", "--url", "https://example.gov.cn/a.jpg",
+                   "--caption", "直流快充桩", "--url", "https://example.gov.cn/a.jpg",
                    "--page", "https://example.gov.cn/a", "--credit", "示例市发改委",
-                   "--license", "官方发布，允许转载", cwd=tmp)  # fmt: skip
+                   "--license", "官方发布，允许转载", *INLINE_WHY, cwd=tmp)  # fmt: skip
     assert rc == 0, out
     return pack
 
@@ -104,7 +112,7 @@ def test_figures_never_touch_the_draft_and_validate(tmp_path: Path) -> None:
         cover.fields["文件"] == f"images/{slug}/P1.jpg"
         and cover.fields["共享名"] == f"{slug}/P1.jpg"
     )
-    assert cover.caption().endswith("（AI 生成）") and inline.caption() == "充电站"
+    assert cover.caption().endswith("（AI 生成）") and inline.caption() == "直流快充桩"
     with Image.open(tmp_path / cover.fields["文件"]) as im:  # cropped to 2.35:1
         assert abs(im.size[0] / im.size[1] - 2.35) < 0.01
     assert cover.fields["哈希"] == ap.file_hash((tmp_path / cover.fields["文件"]).read_bytes())
@@ -117,7 +125,19 @@ def test_figures_never_touch_the_draft_and_validate(tmp_path: Path) -> None:
 def test_figure_rules(tmp_path: Path) -> None:
     pack = _illustrated(tmp_path)
     (tmp_path / "x.jpg").write_bytes(_jpeg())
-    base = ["--file", "x.jpg", "--mode", "生成", "--prompt", "p", "--model", "m", "--caption", "c"]
+    base = [
+        "--file",
+        "x.jpg",
+        "--mode",
+        "生成",
+        "--prompt",
+        "p",
+        "--model",
+        "m",
+        "--caption",
+        "c",
+        *P1_WHY,
+    ]
     assert "已经有封面" in _fig(pack, "add", *base, "--pos", "封面", cwd=tmp_path)[1]
     assert "超出范围" in _fig(pack, "add", *base, "--pos", "第99段后", cwd=tmp_path)[1]
     assert "没有这个小标题" in _fig(pack, "add", *base, "--pos", "「不存在」后", cwd=tmp_path)[1]
@@ -134,9 +154,10 @@ def test_figure_rules(tmp_path: Path) -> None:
         "m",
         "--caption",
         "c",
+        *P1_WHY,
     ]
     assert "不是 JPG" in _fig(pack, "add", *bad, "--pos", "开头", cwd=tmp_path)[1]
-    search = ["--file", "x.jpg", "--mode", "搜索", "--caption", "c", "--pos", "开头"]
+    search = ["--file", "x.jpg", "--mode", "搜索", "--caption", "c", "--pos", "开头", *P1_WHY]
     assert "--url" in _fig(pack, "add", *search, cwd=tmp_path)[1]
     # an unknown licence is an error in the pack itself
     text = pack.read_text(encoding="utf-8").replace("- 授权：官方发布，允许转载", "- 授权：未知")
@@ -199,6 +220,7 @@ def test_fetch_downloads_and_requires_a_licence(tmp_path: Path) -> None:
             "第1段后",
             "--caption",
             "现场",
+            *P1_WHY,
         ]
         rc, out = _fig(
             pack, "fetch", "--url", f"{web}/a.jpg", "--license", "CC BY 4.0", *common, cwd=tmp_path
@@ -226,7 +248,7 @@ def test_preview_html_has_cover_figures_and_appendix(tmp_path: Path) -> None:
     slug = ap.slugify(ap.parse_pack(pack.read_text(encoding="utf-8")).topic)
     page = unquote((tmp_path / f"outputs/preview/{slug}.html").read_text(encoding="utf-8"))
     assert "预览稿，未发布" in page and "核验结论：通过" in page
-    assert "[S1]" not in page and "城市街头的充电桩（AI 生成）" in page
+    assert "[S1]" not in page and "城市街头的公共充电桩（AI 生成）" in page
     assert f"images/{slug}/P1.jpg" in page and f"images/{slug}/P2.jpg" in page
     assert (
         "参考来源" in page
@@ -400,3 +422,96 @@ def test_context_for_cover_heading_and_bad_positions(tmp_path: Path) -> None:
     assert rc == 1 and "超出范围" in out
     text = _fig(pack, "context", "--pos", "第2段后", cwd=tmp_path)[1]
     assert "◀ 图放在这一段后面" in text and "提示词骨架" in text
+
+
+# ---------------------------------------------------------------- tied to the article
+
+
+def test_context_suggests_roles_and_shows_both_sides(tmp_path: Path) -> None:
+    pack = _variant(tmp_path)
+    assert _context(pack, "封面", cwd=tmp_path)["建议用途"] == "点题"
+    bridge = _context(pack, "「要等多久」后", cwd=tmp_path)
+    assert bridge["建议用途"] == "衔接"
+    assert bridge["上文"]["范围"] == "「规模有多大」" and "2亿元" in bridge["上文"]["原文"]
+    assert bridge["下文"]["范围"] == "「要等多久」" and "到账时间" in bridge["下文"]["原文"]
+    assert (
+        _context(pack, "「补贴多少」后", cwd=tmp_path)["建议用途"] == "衔接"
+    )  # intro -> first section
+    assert _context(pack, "第3段后", cwd=tmp_path)["建议用途"] == "衔接"  # section boundary
+    assert any(line.startswith("0. 用途") for line in bridge["提示词骨架"])
+    plan = _fig(pack, "plan", cwd=tmp_path)[1]
+    assert "「要等多久」后：衔接" in plan and "封面：点题" in plan
+
+
+def test_prompt_is_built_from_article_elements(tmp_path: Path) -> None:
+    pack = _variant(tmp_path)
+    _fig(pack, "style", "扁平插画，蓝绿主色", cwd=tmp_path)
+    args = ["--pos", "「要等多久」后", "--role", "衔接", "--point", "充电桩建成后在等审批",
+            "--elements", "公共充电桩,审批", "--scene", "傍晚", "--json"]  # fmt: skip
+    rc, out = _fig(pack, "prompt", *args, cwd=tmp_path)
+    assert rc == 0, out
+    text = json.loads(out)["提示词"]
+    assert "从「规模有多大」过渡到「要等多久」" in text and "公共充电桩" in text and "审批" in text
+    assert "扁平插画，蓝绿主色" in text and "不出现任何文字" in text
+    one_side = _fig(pack, "prompt", *args[:7], "审批", cwd=tmp_path)
+    assert one_side[0] == 1 and "没有上文" in one_side[1]
+    invented = _fig(pack, "prompt", "--pos", "封面", "--role", "点题", "--point", "x",
+                    "--elements", "飞船", cwd=tmp_path)  # fmt: skip
+    assert invented[0] == 1 and "找不到" in invented[1]
+    cover = json.loads(_fig(pack, "prompt", "--pos", "封面", "--role", "点题", "--point", "补贴来了",
+                            "--elements", "公共充电桩", "--json", cwd=tmp_path)[1])  # fmt: skip
+    assert "公众号封面" in cover["提示词"] and "2.35:1" in cover["提示词"]
+
+
+def test_add_refuses_figures_not_tied_to_the_text(tmp_path: Path) -> None:
+    pack = _variant(tmp_path)
+    (tmp_path / "x.jpg").write_bytes(_jpeg())
+    base = [
+        "--file",
+        "x.jpg",
+        "--mode",
+        "生成",
+        "--prompt",
+        "p",
+        "--model",
+        "m",
+        "--caption",
+        "充电桩",
+    ]
+    bridge = ["--pos", "「要等多久」后", "--role", "衔接", "--point", "建成后等审批"]
+
+    def add(*extra: str) -> tuple[int, str]:
+        return _fig(pack, "add", *base, *extra, cwd=tmp_path)
+
+    rc, out = add(*bridge, "--elements", "公共充电桩,审批", "--basis", "「凭空编的一句话」",
+                  "--seen", "公共充电桩和审批窗口")  # fmt: skip
+    assert rc == 1 and "不是初稿里的原文" in out
+    rc, out = add(*bridge, "--elements", "公共充电桩,审批", "--basis", "「关于到账时间，官方没有给出时限」",
+                  "--seen", "公共充电桩和审批窗口")  # fmt: skip
+    assert rc == 1 and "没有上文" in out  # basis only quotes the next section
+    rc, out = add(*bridge, "--elements", "公共充电桩,审批,申请材料",
+                  "--basis", "「这笔补贴大约能带动5000个公共充电桩建成」「关于到账时间，官方没有给出时限」",
+                  "--seen", "一片蓝色的天空")  # fmt: skip
+    assert rc == 1 and "画面描述里没看到" in out
+    rc, out = add(*bridge, "--elements", "公共充电桩,审批",
+                  "--basis", "「这笔补贴大约能带动5000个公共充电桩建成」「关于到账时间，官方没有给出时限」",
+                  "--seen", "左边是一排建好的公共充电桩，右边是排队等审批的商户")  # fmt: skip
+    assert rc == 0, out
+    fig = ap.parse_pack(pack.read_text(encoding="utf-8")).figures()[0]
+    assert fig.fields["用途"] == "衔接" and fig.fields["画面元素"] == "公共充电桩，审批"
+    assert "公共充电桩" in fig.fields["画面描述"]
+    rc, out = _fig(pack, "check", cwd=tmp_path)
+    assert rc == 0, out
+    rc, out = add("--pos", "开头", "--role", "衔接", "--point", "x", "--elements", "公共充电桩",
+                  "--basis", "「新建的公共充电桩」", "--seen", "公共充电桩")  # fmt: skip
+    assert rc == 1 and "不能做衔接图" in out
+
+
+def test_check_flags_old_figures_without_reasons(tmp_path: Path) -> None:
+    pack = _illustrated(tmp_path)
+    text = pack.read_text(encoding="utf-8")
+    pack.write_text(
+        re.sub(r"(?m)^- (用途|画面要点|依据|画面元素|画面描述)：.*\n", "", text), encoding="utf-8"
+    )
+    rc, out = _fig(pack, "check", cwd=tmp_path)
+    assert rc == 3 and "用途应为" in out and "缺少画面描述" in out

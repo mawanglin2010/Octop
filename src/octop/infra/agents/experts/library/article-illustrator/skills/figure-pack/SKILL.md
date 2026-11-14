@@ -1,6 +1,6 @@
 ---
 name: figure-pack
-description: "登记配图和出预览：figures.py 列出初稿的段落编号和小标题并给出配图建议（plan）、设定整篇统一画面风格（style）、取某个位置的上下文和提示词骨架（context：标题、所在小节、前后段落、引用来源摘录、已有配图）、登记生成的图（add，可按 2.35:1 等比例裁剪）、下载并登记搜索来的图（fetch，记录图片地址、来源页、署名、授权）、移除（remove）、检查配图单、图片文件和哈希（check）、列出要放进共享文件夹的文件（share）；preview_pdf.py 把初稿和配图排成预览页导出 PDF（附参考来源、图片来源和配图清单）。配图、出预览、交给发布专员时使用。"
+description: "登记配图和出预览（每张图写明用途：点题、衔接或说明，并有初稿原句作依据）：figures.py 列出初稿的段落编号和小标题并给出配图建议（plan）、设定整篇统一画面风格（style）、取某个位置的上下文和提示词骨架（context：标题、所在小节、前后段落、引用来源摘录、已有配图）、按用途拼提示词并检查画面元素都来自文章（prompt）、登记生成的图（add，可按 2.35:1 等比例裁剪）、下载并登记搜索来的图（fetch，记录图片地址、来源页、署名、授权）、移除（remove）、检查配图单、图片文件和哈希（check）、列出要放进共享文件夹的文件（share）；preview_pdf.py 把初稿和配图排成预览页导出 PDF（附参考来源、图片来源和配图清单）。配图、出预览、交给发布专员时使用。"
 metadata:
   octop:
     emoji: "🖼️"
@@ -41,19 +41,44 @@ python scripts/figures.py context 文章包.md --pos 第4段后            # 锚
 python scripts/figures.py context 文章包.md --pos "「要等多久」后" --window 3 --json
 ```
 
-`context` 输出：读者和风格要求、统一画面风格、标题和摘要、全文小标题、所在小节、上下文段落原文（去掉来源标记，锚点段落有标记）、这些段落引用的来源摘录、已有配图，以及提示词骨架。封面取开头几段和全文结构，小标题位置取整个小节。每张图写提示词前都先跑一次。
+`context` 输出：建议用途、上文和下文、读者和风格要求、统一画面风格、标题和摘要、全文小标题、所在小节、上下文段落原文（去掉来源标记，锚点段落有标记）、这些段落引用的来源摘录、已有配图，以及提示词骨架。封面取开头几段和全文结构，小标题位置取整个小节。每张图写提示词前都先跑一次。
 
-## 3. 登记
+## 3. 用途、依据和提示词
+
+每张图都要回答“为什么放在这里”，登记时这五项必填，`add` 和 `check` 会逐条核对：
+
+| 项 | 写什么 | 怎么核对 |
+|----|--------|----------|
+| 用途 | 点题 / 衔接 / 说明 | 封面和开头不能是衔接；点题图依据应来自标题、摘要、开头或结尾 |
+| 画面要点 | 一句话：读者看图能懂什么 | 必填 |
+| 依据 | 初稿原句，用「」括起，可多句 | 必须是初稿里逐字出现的话；衔接图要上文、下文各有一句 |
+| 画面元素 | 画面里的人、物、场景，逗号分隔 | 每个都要在初稿或来源摘录里出现过；衔接图上文、下文各至少一个 |
+| 画面描述 | 看图后写下画面里实际有什么 | 至少要看到一半的画面元素，否则判为图不对题 |
+
+拼提示词：
+
+```bash
+python scripts/figures.py prompt 文章包.md --pos "「要等多久」后" --role 衔接 \
+    --point "大批充电桩建成后，商户在等审批到账" --elements "公共充电桩,审批" --scene "傍晚，冷静克制"
+```
+
+脚本按用途套用写法（点题写主旨、衔接写“从上一节过渡到下一节，前景一侧是上文的元素、另一侧是下文的元素”、说明写段落内容），带上统一画面风格、构图和“不出现文字”，并检查元素是否都来自文章。输出的提示词可以再润色，但元素和要点不要换掉。
+
+## 4. 登记
 
 ```bash
 # 生成的图：先调用 generate_image，拿到工作区里的路径
 python scripts/figures.py add 文章包.md --file generated/images/xxx.jpg --mode 生成 \
     --prompt "城市街头的电动车充电桩，扁平插画，蓝绿色调，横版构图" --model "doubao-seedream-5.0-flash" \
-    --pos 封面 --caption "城市街头的充电桩" --crop 2.35:1
+    --pos 封面 --caption "城市街头新装的公共充电桩" --crop 2.35:1 \
+    --role 点题 --point "新建充电桩按功率领补贴" --elements "公共充电桩" \
+    --basis "「新建充电桩每千瓦补贴300元」" --seen "傍晚的城市街头，一排崭新的公共充电桩"
 
 # 搜索来的图：下载并登记
 python scripts/figures.py fetch 文章包.md --url https://…/photo.jpg --page https://…/photo-page \
-    --credit "示例市发改委" --license "官方发布，允许转载" --pos 第2段后 --caption "充电站现场"
+    --credit "示例市发改委" --license "官方发布，允许转载" --pos 第2段后 --caption "一台直流快充桩" \
+    --role 说明 --point "直流快充桩按千瓦补贴" --elements "直流快充桩" \
+    --basis "「直流快充桩每千瓦补贴300元」" --seen "停车位旁的一台直流快充桩"
 ```
 
 - 图片复制到 `images/<话题>/P1.jpg`，共享名是 `<话题>/P1.jpg`，同时记下文件哈希；
@@ -61,7 +86,7 @@ python scripts/figures.py fetch 文章包.md --url https://…/photo.jpg --page 
 - 只收 JPG、PNG、GIF、WebP，单张不超过 15 MB；
 - 生成的图，图注在预览和发布时自动加“（AI 生成）”。
 
-## 4. 检查
+## 5. 检查
 
 ```bash
 python scripts/figures.py check 文章包.md          # 退出码 3 表示有错误
@@ -69,7 +94,7 @@ python scripts/figures.py check 文章包.md          # 退出码 3 表示有错
 
 检查：必填项、位置是否存在、只能一张封面、搜索图的授权（“未知”“不明”直接判错）、网址格式、图片文件是否还在、内容是否和登记时一致（哈希）。图注里有数字会提示：图注只描述画面。
 
-## 5. 预览 PDF
+## 6. 预览 PDF
 
 ```bash
 python scripts/preview_pdf.py 文章包.md --author 小编 [--theme green] [-o outputs/preview/充电桩补贴.pdf]
@@ -80,7 +105,7 @@ python scripts/preview_pdf.py 文章包.md --author 小编 [--theme green] [-o o
 - PDF 用无头 Chromium 打印。退出码 2 表示没装 Chromium（设置 → 浏览器里安装），此时只有 HTML；
 - 机器上没有中文字体时会提示，PDF 里的中文可能是方框，HTML 不受影响。
 
-## 6. 交给发布专员
+## 7. 交给发布专员
 
 ```bash
 python scripts/figures.py share 文章包.md
