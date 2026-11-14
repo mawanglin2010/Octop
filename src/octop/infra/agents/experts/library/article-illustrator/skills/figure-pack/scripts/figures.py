@@ -17,11 +17,15 @@ Usage:
     python scripts/figures.py check 文章包.md [--json]              检查配图单、文件是否存在、哈希是否一致
     python scripts/figures.py share 文章包.md [--json]              列出要用 shared_file_put 放进共享文件夹的文件
 
+    python scripts/figures.py spots 文章包.md [--count 3] [--json]   给每段打分，推荐配图位置（点明中心事项 / 帮读者看懂），附关键句
     python scripts/figures.py prompt 文章包.md --pos 「要等多久」后 --role 衔接 --point 画面要点 \
         --elements "元素1,元素2,元素3" [--scene 场景氛围]          按上下文拼出提示词，并检查元素都来自文章
 
 每张图都要说清“为什么放在这里”（add 时必填，check 会逐条核对）：
-    用途：点题（封面 / 开头，表现全文主旨）| 衔接（承上启下，画面同时有上文和下文的元素）| 说明（把所在段落讲的东西画出来）
+    用途：点题（封面 / 开头表现全文主旨；正文里点明这一节的中心事项）| 衔接（承上启下，画面同时有上文和下文的元素）
+          | 说明（帮读者看懂刚读完的那段：流程、对比、数字、结构）
+    位置要紧跟内容：点题和说明图放在依据所在段落的后面（第N段后，依据在第N段或第N-1段），
+          或放在小标题后（依据在这一节头两段）；check 会拦住“图离它讲的内容太远”和“相邻两段都配图”
     画面要点：一句话，这张图让读者看懂什么          依据：从初稿逐字摘的原句，用「」括起，可多句
     画面元素：画面里的具体人、物、场景，逗号分隔，每个都必须是文章或来源摘录里出现过的说法
     画面描述：生成或找到图之后，看图写下画面里实际有什么（要能看到大部分画面元素）
@@ -259,6 +263,8 @@ def check(pack: ap.Pack, base: Path) -> list[ap.Issue]:
     if "配图单" not in pack.sections:
         issues.append(ap.Issue("error", "配图单", "文章包里还没有配图单"))
         return issues
+    for fid, lvl, msg in spacing_problems(pack):
+        issues.append(ap.Issue(lvl, fid, msg))
     for fig in pack.figures():
         for lvl, msg in grounding_problems(
             pack, fig.position, fig.fields, fig.fields.get("图注", "")
@@ -595,6 +601,182 @@ def sides(pack: ap.Pack, pos: str) -> tuple[str, str, str, str]:
     return "", "", "", ""
 
 
+def anchor_of(pack: ap.Pack, pos: str) -> int:
+    """Paragraph number the figure follows (0 = before the first paragraph)."""
+    _title, _digest, rows = outline(pack.draft())
+    if m := ap.POS_PARA_RE.match(pos):
+        return int(m.group(1))
+    if m := ap.POS_HEAD_RE.match(pos):
+        idx = [i for i, (h, _) in enumerate(rows) if h == m.group(1).strip()]
+        return idx[0] if idx else 0
+    return 0
+
+
+def quote_paragraphs(pack: ap.Pack, quote: str) -> list[int]:
+    """Paragraph numbers (1-based) containing *quote*; 0 for the title or digest."""
+    title, digest, rows = outline(pack.draft())
+    q = flat(quote)
+    hits = [i + 1 for i, (_, t) in enumerate(rows) if q in flat(t)]
+    if q in flat(title) or q in flat(digest):
+        hits.insert(0, 0)
+    return hits
+
+
+def placement_problem(pack: ap.Pack, pos: str, good: list[str]) -> str | None:
+    """A 点题 / 说明 figure must sit right where its quoted text is read.
+
+    After paragraph N: the quote is in paragraph N or N-1 (the reader has just read it).
+    After a heading: the quote is in the first two paragraphs of that section (the figure leads it).
+    """
+    anchor = anchor_of(pack, pos)
+    found = sorted({n for q in good for n in quote_paragraphs(pack, q) if n})
+    if not found:
+        return None
+    if ap.POS_HEAD_RE.match(pos):
+        ok = {anchor + 1, anchor + 2}
+        where = f"{pos.removesuffix('后')}这一节的头两段"
+    else:
+        ok = {anchor, anchor - 1}
+        where = f"第{anchor}段或第{anchor - 1}段"
+    if ok & set(found):
+        return None
+    best = found[0]
+    return (
+        f"图放的位置离它要讲的内容太远：依据在第{'、'.join(map(str, found))}段，图在{pos}，"
+        f"依据应在{where}。建议改放到“第{best}段后”，或换成这里附近的原句"
+    )
+
+
+CENTER_CUES = (
+    "关键",
+    "核心",
+    "最重要",
+    "重点",
+    "意味着",
+    "总之",
+    "说白了",
+    "一句话",
+    "结论",
+    "本质",
+    "真正",
+)
+EXPLAIN_CUES = ("首先", "其次", "然后", "最后", "流程", "步骤", "环节", "先", "再",
+                "相比", "对比", "区别", "不同", "一方面", "另一方面", "而是", "位于", "分布", "结构", "组成", "包括")  # fmt: skip
+
+
+def bigrams(text: str) -> set[str]:
+    t = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", text)
+    return {t[i : i + 2] for i in range(len(t) - 1)}
+
+
+def sentences(text: str) -> list[str]:
+    return [x for x in re.split(r"(?<=[。！？；])", text) if x.strip()]
+
+
+def score_spots(pack: ap.Pack) -> list[dict[str, Any]]:
+    """Rank every body paragraph as a place for a figure, with the reason and the key sentence."""
+    title, digest, rows = outline(pack.draft())
+    theme = bigrams(title + digest + pack.topic)
+    out: list[dict[str, Any]] = []
+    for i, (head, raw) in enumerate(rows):
+        text = clean(raw)
+        n = i + 1
+        sents = sentences(text) or [text]
+        local = theme | bigrams(head)
+
+        def center(
+            sent: str, local: set[str] = local, cited: bool = bool(ap.CITE_RE.search(raw))
+        ) -> float:
+            b = bigrams(sent)
+            overlap = len(b & local) / (len(b) ** 0.5 or 1)
+            return overlap + 1.5 * sum(c in sent for c in CENTER_CUES) + 0.5 * cited
+
+        def explain(sent: str) -> float:
+            nums = len(re.findall(r"\d+(?:\.\d+)?", sent))
+            return (
+                1.0 * sum(c in sent for c in EXPLAIN_CUES) + 0.5 * min(nums, 4) + (len(sent) > 60)
+            )
+
+        key_c = max(sents, key=center)
+        key_e = max(sents, key=explain)
+        c_score, e_score = center(key_c), explain(key_e) + (len(text) > 140)
+        boundary = n < len(rows) and rows[n][0] != head
+        if c_score >= e_score:
+            role, why, key, score = "点题", "点明中心事项", key_c, c_score
+        else:
+            role, why, key, score = (
+                "说明",
+                "帮读者看懂这段（流程、对比、数字或结构）",
+                key_e,
+                e_score,
+            )
+        if len(text) < 25:
+            score -= 2
+        out.append({"段": n, "小节": head, "建议用途": role, "理由": why, "关键句": key.strip(),
+                    "得分": round(score, 2), "节末": boundary})  # fmt: skip
+    return out
+
+
+def pick_spots(spots: list[dict[str, Any]], count: int, taken: set[int]) -> list[dict[str, Any]]:
+    """Best *count* spots, at least two paragraphs apart from each other and from *taken*."""
+    chosen: list[dict[str, Any]] = []
+    for spot in sorted(spots, key=lambda x: -x["得分"]):
+        if len(chosen) >= count:
+            break
+        near = taken | {c["段"] for c in chosen}
+        if spot["段"] == 1 or any(abs(spot["段"] - t) < 2 for t in near):
+            continue
+        chosen.append(spot)
+    return sorted(chosen, key=lambda x: x["段"])
+
+
+def spacing_problems(pack: ap.Pack) -> list[tuple[str, str, str]]:
+    """(figure id, level, message) for body figures that crowd each other."""
+    body = [(anchor_of(pack, f.position), f) for f in pack.figures() if f.position not in ("封面",)]
+    body.sort(key=lambda x: x[0])
+    out = []
+    for (a1, f1), (a2, f2) in zip(body, body[1:], strict=False):
+        if a1 == a2:
+            out.append((f2.id, "error", f"{f2.id} 和 {f1.id} 放在同一个位置：一个位置只放一张图"))
+        elif a2 - a1 < 2:
+            out.append(
+                (f2.id, "warn", f"{f2.id} 和 {f1.id} 只隔 {a2 - a1} 段：相邻两段都配图会打断阅读")
+            )
+    return out
+
+
+def cmd_spots(a: argparse.Namespace) -> int:
+    pack = ap.read_pack(Path(a.pack))
+    if not pack.draft():
+        print("文章包里还没有初稿", file=sys.stderr)
+        return 1
+    spots = score_spots(pack)
+    taken = {anchor_of(pack, f.position) for f in pack.figures() if f.position != "封面"}
+    count = a.count or max(1, min(4, (len(spots) + 2) // 3))
+    chosen = pick_spots(spots, count, taken)
+    if a.json:
+        print(json.dumps({"推荐": chosen, "全部": spots}, ensure_ascii=False, indent=2))
+        return 0
+    print(
+        f"正文 {len(spots)} 段，推荐 {len(chosen)} 个配图位置（相互至少隔一段，已有配图的位置附近不再推荐）："
+    )
+    for s in chosen:
+        print(f"- 第{s['段']}段后（{s['小节'] or '开头部分'}）：{s['建议用途']}，{s['理由']}")
+        print(f"    关键句：{s['关键句']}")
+        print(f"    依据可直接用：「{s['关键句'].rstrip('。！？；')}」")
+    bounds = [s for s in spots if s["节末"]]
+    if bounds:
+        print(
+            "两节之间（适合放衔接图）："
+            + "，".join(
+                f"第{s['段']}段后（{'「' + s['小节'] + '」' if s['小节'] else '开头部分'}结束）"
+                for s in bounds
+            )
+        )
+    print("用 context --pos 看清上下文后再定；图要紧跟在它讲的那句话后面，不要隔好几段")
+    return 0
+
+
 def grounding_problems(
     pack: ap.Pack, pos: str, f: dict[str, str], caption: str
 ) -> list[tuple[str, str]]:
@@ -611,8 +793,6 @@ def grounding_problems(
         out.append(("error", "缺少画面元素：列出画面里的具体人、物、场景"))
     if not seen:
         out.append(("error", "缺少画面描述：看图后写下画面里实际有什么"))
-    if role == "点题" and pos not in ("封面", "开头"):
-        out.append(("warn", "点题图一般放在封面或开头；正文里的图更适合衔接或说明"))
     if role == "衔接" and pos in ("封面", "开头"):
         out.append(("error", "封面和开头没有上文，不能做衔接图"))
     draft = flat(pack.draft())
@@ -650,15 +830,17 @@ def grounding_problems(
                     f"衔接图的画面元素里没有下文（{after_name}）出现的东西：至少放一个下文里的人、物或场景",
                 )
             )
-    if role == "说明" and good and not any(flat(q) in flat(before + after) for q in good):
-        out.append(("warn", "说明图的依据不在所在段落附近，确认放的位置对不对"))
-    if role == "点题" and good:
+    if role in ("点题", "说明") and good and pos not in ("封面", "开头"):
+        problem = placement_problem(pack, pos, good)
+        if problem:
+            out.append(("error", problem))
+    if role == "点题" and good and pos in ("封面", "开头"):
         title, digest, rows = outline(pack.draft())
         lead = flat(
             "\n".join([title, digest, *(t for _, t in rows[:2]), *(t for _, t in rows[-1:])])
         )
         if not any(flat(q) in lead for q in good):
-            out.append(("warn", "点题图的依据最好来自标题、摘要、开头或结尾"))
+            out.append(("warn", "封面和开头的点题图，依据应来自标题、摘要、开头或结尾（全文主旨）"))
     if seen and elements:
         hit = [e for e in elements if flat(e) in flat(seen)]
         if len(hit) * 2 < len(elements):
@@ -753,14 +935,17 @@ def cmd_plan(a: argparse.Namespace) -> int:
         print(f"  第{n}段：{text[:40]}{'…' if len(text) > 40 else ''}")
     for h in heads:
         print(f"  小标题：「{h}」")
-    print("建议方案（用途：点题 / 衔接 / 说明）：")
-    print("  封面：点题，表现全文主旨")
-    for h in heads[1:]:
-        print(f"  「{h}」后：衔接，承接上一节、引出这一节")
-    body = max(1, min(len(heads) or (len(paras) + 3) // 4, 5))
+    print("建议方案：")
+    print("  封面：点题，表现全文主旨（依据取标题、摘要或开头）")
+    chosen = pick_spots(score_spots(pack), max(1, min(4, (len(paras) + 2) // 3)), set())
+    for spot in chosen:
+        print(
+            f"  第{spot['段']}段后：{spot['建议用途']}，{spot['理由']}；关键句：{spot['关键句'][:40]}"
+        )
     print(
-        f"建议：封面 1 张（公众号封面约 2.35:1）；正文 {body} 张，放在小标题后或段落之间；不要连续两段都配图"
+        "  两节之间转折明显、读者容易断的地方，可以把其中一张换成衔接图（spots 会列出各节结束的位置）"
     )
+    print("  图要紧跟在它讲的那句话后面；相邻两段不要都配图")
     if pack.figures():
         print("已登记：" + "，".join(f"{f.id}（{f.position}，{f.mode}）" for f in pack.figures()))
     if not pack.front.get("figure-style"):
@@ -790,6 +975,11 @@ def build_parser() -> argparse.ArgumentParser:
     cx.add_argument("--window", type=int, default=2, help="锚点前后各取几段（默认 2）")
     cx.add_argument("--json", action="store_true")
     cx.set_defaults(fn=cmd_context)
+    sp = sub.add_parser("spots")
+    sp.add_argument("pack")
+    sp.add_argument("--count", type=int, default=0, help="推荐几个位置（默认按篇幅 1–4 个）")
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(fn=cmd_spots)
     pr = sub.add_parser("prompt")
     pr.add_argument("pack")
     pr.add_argument("--pos", required=True)

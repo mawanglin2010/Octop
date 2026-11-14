@@ -440,7 +440,7 @@ def test_context_suggests_roles_and_shows_both_sides(tmp_path: Path) -> None:
     assert _context(pack, "第3段后", cwd=tmp_path)["建议用途"] == "衔接"  # section boundary
     assert any(line.startswith("0. 用途") for line in bridge["提示词骨架"])
     plan = _fig(pack, "plan", cwd=tmp_path)[1]
-    assert "「要等多久」后：衔接" in plan and "封面：点题" in plan
+    assert "封面：点题" in plan and re.search(r"第\d+段后：(点题|说明)，", plan)
 
 
 def test_prompt_is_built_from_article_elements(tmp_path: Path) -> None:
@@ -515,3 +515,80 @@ def test_check_flags_old_figures_without_reasons(tmp_path: Path) -> None:
     )
     rc, out = _fig(pack, "check", cwd=tmp_path)
     assert rc == 3 and "用途应为" in out and "缺少画面描述" in out
+
+
+# ---------------------------------------------------------------- placement
+
+
+def test_spots_recommend_spaced_positions_with_key_sentences(tmp_path: Path) -> None:
+    pack = _variant(tmp_path)
+    rc, out = _fig(pack, "spots", "--json", cwd=tmp_path)
+    assert rc == 0, out
+    data = json.loads(out)
+    picked = [s["段"] for s in data["推荐"]]
+    assert picked and 1 not in picked
+    assert all(b - a >= 2 for a, b in zip(picked, picked[1:], strict=False))
+    draft = ap.parse_pack(pack.read_text(encoding="utf-8")).draft()
+    for s in data["推荐"]:
+        bare = re.sub(r"\s|\[S\d+(?:,S\d+)*\]", "", draft)
+        assert s["建议用途"] in ("点题", "说明") and re.sub(r"\s", "", s["关键句"]) in bare
+    assert len(data["全部"]) == 7
+    two = json.loads(_fig(pack, "spots", "--count", "2", "--json", cwd=tmp_path)[1])["推荐"]
+    assert len(two) == 2
+    text = _fig(pack, "spots", cwd=tmp_path)[1]
+    assert "依据可直接用：「" in text and "开头部分结束" in text
+
+
+def test_figures_must_sit_next_to_their_text(tmp_path: Path) -> None:
+    pack = _variant(tmp_path)
+    (tmp_path / "x.jpg").write_bytes(_jpeg())
+    base = [
+        "--file",
+        "x.jpg",
+        "--mode",
+        "生成",
+        "--prompt",
+        "p",
+        "--model",
+        "m",
+        "--caption",
+        "公共充电桩",
+    ]
+    far = ["--role", "说明", "--point", "补贴能带动大批充电桩", "--elements", "公共充电桩",
+           "--basis", "「这笔补贴大约能带动5000个公共充电桩建成」", "--seen", "一片公共充电桩"]  # fmt: skip
+    rc, out = _fig(pack, "add", *base, "--pos", "第2段后", *far, cwd=tmp_path)
+    assert rc == 1 and "离它要讲的内容太远" in out and "第4段后" in out
+    assert _fig(pack, "add", *base, "--pos", "第4段后", *far, cwd=tmp_path)[0] == 0
+    # a section-heading position needs the quote in that section's first paragraphs
+    assert "太远" in _fig(pack, "add", *base, "--pos", "「要等多久」后", *far, cwd=tmp_path)[1]
+    head_ok = ["--role", "点题", "--point", "到账时间说不准", "--elements", "到账时间",
+               "--basis", "「关于到账时间，官方没有给出时限」", "--seen", "等待到账时间的人"]  # fmt: skip
+    assert _fig(pack, "add", *base, "--pos", "「要等多久」后", *head_ok, cwd=tmp_path)[0] == 0
+
+
+def test_check_flags_crowded_figures(tmp_path: Path) -> None:
+    pack = _variant(tmp_path)
+    (tmp_path / "x.jpg").write_bytes(_jpeg())
+    base = [
+        "--file",
+        "x.jpg",
+        "--mode",
+        "生成",
+        "--prompt",
+        "p",
+        "--model",
+        "m",
+        "--caption",
+        "直流快充桩",
+    ]
+    p2 = ["--role", "说明", "--point", "按千瓦补贴", "--elements", "直流快充桩",
+          "--basis", "「直流快充桩每千瓦补贴300元」", "--seen", "一台直流快充桩"]  # fmt: skip
+    p3 = ["--role", "说明", "--point", "建成后60日内交材料", "--elements", "申请材料",
+          "--basis", "「申请材料须在建成后60日内提交」", "--seen", "一叠申请材料"]  # fmt: skip
+    assert _fig(pack, "add", *base, "--pos", "第2段后", *p2, cwd=tmp_path)[0] == 0
+    assert _fig(pack, "add", *base, "--pos", "第3段后", *p3, cwd=tmp_path)[0] == 0
+    rc, out = _fig(pack, "check", cwd=tmp_path)
+    assert rc == 0 and "只隔 1 段" in out
+    assert _fig(pack, "add", *base, "--pos", "第3段后", *p3, "--id", "P3", cwd=tmp_path)[0] == 0
+    rc, out = _fig(pack, "check", cwd=tmp_path)
+    assert rc == 3 and "同一个位置" in out
