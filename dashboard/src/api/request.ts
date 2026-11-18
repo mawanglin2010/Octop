@@ -5,9 +5,12 @@ import {
   renewDesktopSession,
 } from "./desktopSession";
 import i18n from "../i18n";
+import { appPathname, hasRuntimeBase, publicUrl } from "../utils/publicUrl";
 import { markNavigatingAway } from "../utils/reloadOnStaleChunk";
 
-const AUTH_TOKEN_KEY = "auth_token";
+// fork: behind the fnOS gateway every app shares the fnOS origin (and its
+// storage); namespace the token so another app's "auth_token" cannot clash.
+const AUTH_TOKEN_KEY = hasRuntimeBase() ? "octop:auth_token" : "auth_token";
 /** sessionStorage handoff for SSO redirects / popups (default = remember). */
 const AUTH_REMEMBER_PREF_KEY = "auth_remember_pref";
 
@@ -124,7 +127,7 @@ function handleSetupRequired(): void {
   if (_redirectingToSetup) return;
   // Already on a public bootstrap route — a 503 from a background prefetch
   // must not reload the page or we loop forever.
-  const path = window.location.pathname;
+  const path = appPathname();
   if (
     path.startsWith("/setup") ||
     path.startsWith("/login") ||
@@ -134,7 +137,7 @@ function handleSetupRequired(): void {
   }
   _redirectingToSetup = true;
   // Full reload drops any in-flight React state.
-  window.location.replace("/setup");
+  window.location.replace(publicUrl("setup"));
 }
 
 /** Wizard endpoints stay reachable while lockdown is active. */
@@ -316,7 +319,7 @@ const SESSION_UNAUTHORIZED_CODES = new Set(["AUTH_FAILED", "TOKEN_EXPIRED"]);
  */
 function handleUnauthorized(): void {
   if (_redirectingToLogin) return;
-  const path = window.location.pathname;
+  const path = appPathname();
   if (
     path.startsWith("/setup") ||
     path.startsWith("/login") ||
@@ -331,7 +334,7 @@ function handleUnauthorized(): void {
   if (takenOver) return;
 
   markNavigatingAway();
-  window.location.replace("/login");
+  window.location.replace(publicUrl("login"));
 }
 
 /**

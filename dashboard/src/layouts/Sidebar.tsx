@@ -31,7 +31,7 @@ import {
   railShortcutLabel,
 } from "../utils/railShortcuts";
 import { preferencesApi } from "../api/modules/preferences";
-import { publicUrl } from "../utils/publicUrl";
+import { appPathname, publicUrl } from "../utils/publicUrl";
 import {
   COLLAPSED_WIDTH,
   EXPANDED_WIDTH,
@@ -509,7 +509,7 @@ export default function Sidebar({
     // When navigating to /chat, preserve the current chatId in the URL so the
     // Chat component is not remounted (key stays the same) and the user stays
     // on their most recent conversation instead of seeing a blank welcome screen.
-    if (path === "/chat" && window.location.pathname.startsWith("/chat/")) {
+    if (path === "/chat" && appPathname().startsWith("/chat/")) {
       if (isMobile) onToggle();
       return;
     }

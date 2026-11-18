@@ -64,6 +64,14 @@ async def _serve(server: Any) -> None:
     await server.serve()
 
 
+async def _serve_optional(server: Any, label: str) -> None:
+    """fork: an extra listener whose failure must not stop the main port."""
+    try:
+        await server.serve()
+    except (OSError, SystemExit) as exc:
+        logger.error("%s listener failed, continuing without it: %s", label, exc)
+
+
 async def run_foreground(
     *,
     host: str | None,
@@ -78,6 +86,10 @@ async def run_foreground(
     import uvicorn
 
     from octop.api.app import build_app
+    from octop.api.middleware.fnos_gateway import (  # fork: fnOS gateway
+        GatewayPrefixMiddleware,
+        gateway_listener_from_env,
+    )
     from octop.infra.bridge.transport import BRIDGE_WS_MAX_BYTES
     from octop.infra.setup.tls.http_companion import build_http_companion_app
     from octop.infra.setup.tls.listeners import build_listen_plan
@@ -167,13 +179,35 @@ async def run_foreground(
         )
         servers.append(uvicorn.Server(single_config))
 
+    # fork: fnOS unified gateway listener (Unix socket, /app/<name> prefix).
+    optional_servers: list[uvicorn.Server] = []
+    gateway = None if desktop_shell_enabled() else gateway_listener_from_env()
+    if gateway is not None:
+        gateway_socket, gateway_prefix = gateway
+        gateway_config = uvicorn.Config(
+            GatewayPrefixMiddleware(app, gateway_prefix),
+            uds=gateway_socket,
+            lifespan="off",
+            log_level=level,
+            workers=1,
+            reload=False,
+            ws_max_size=BRIDGE_WS_MAX_BYTES,
+            ws_ping_interval=_WS_PING_INTERVAL,
+            ws_ping_timeout=_WS_PING_TIMEOUT,
+        )
+        optional_servers.append(uvicorn.Server(gateway_config))
+        logger.info("Listening on unix:%s (fnOS gateway %s)", gateway_socket, gateway_prefix)
+
     from octop.infra.agents.memory.slim_control import MemorySlimControl
 
     memory_control = MemorySlimControl(srv)
     with coalesce_accept_errors(asyncio.get_running_loop()):
         try:
             await memory_control.start()
-            await asyncio.gather(*(_serve(s) for s in servers))
+            await asyncio.gather(
+                *(_serve(s) for s in servers),
+                *(_serve_optional(s, "fnOS gateway") for s in optional_servers),  # fork
+            )
         finally:
             await memory_control.close()
             await _cancel_background_task(bwrap_task)
