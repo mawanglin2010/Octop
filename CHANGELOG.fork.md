@@ -4,6 +4,14 @@
 
 版本号规则：`<官方版本>.postN`，例如基于官方 1.0.2b9 的第 1 个 fork 版本是 `1.0.2b9.post1`。打 `fork-v<版本号>` 标签（如 `fork-v1.0.2b9.post6`；不用 `v` 开头，以免触发官方发布流程）后，`.github/workflows/fork-release.yml` 会构建 wheel 和飞牛原生版 FPK，并发布到 GitHub Release；本文件中同名版本小节会作为 Release 说明。
 
+## [1.0.3b5.post12] - 2026-11-18
+
+### 修复
+- 飞牛原生版：用 https、域名或 FN Connect 打开飞牛时，点 Octop 图标弹出的窗口是白屏。原因是窗口固定按 `http://<地址>:8089` 嵌入，https 页面里的 http 内容被浏览器拦截。窗口改走飞牛统一网关（`/app/octop-native/`），自动跟随飞牛当前的 http / https，内网和远程都能用；直接访问 `http://设备IP:8089` 不受影响。
+  - 后端在 8089 之外再监听应用目录下的 `gateway.sock`，只对这个入口去掉 `/app/octop-native` 前缀，并给网页注入运行时基础路径和一段改写请求地址的脚本（`src/octop/api/middleware/fnos_gateway.py`）；socket 起不来时只记错误，8089 照常服务。
+  - 前端的资源、路由、跳转（登录 / 安装向导 / 出错回首页）改为读取运行时基础路径；网关入口下不注册 Service Worker，登录令牌换用 `octop:auth_token`，避免和同一飞牛地址下其他应用冲突。
+- 飞牛商店版本 1.0.30512。
+
 ## [1.0.3b5.post11] - 2026-11-15
 
 ### 变更
