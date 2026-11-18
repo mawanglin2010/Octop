@@ -24,6 +24,7 @@ import { Input, Tabs, Segmented, Tooltip } from "antd";
 import { message } from "@/utils/antdMessage";
 
 import {
+  Cable,
   Cloudy,
   CopyPlus,
   GraduationCap,
@@ -37,6 +38,7 @@ import {
 } from "lucide-react";
 import cx from "classnames";
 import PageShell from "../../layouts/PageShell";
+import BetaBadge from "../../components/BetaBadge";
 import TabLabel from "../../components/TabLabel";
 import StreamSetupGuide from "../../components/StreamSetupGuide/StreamSetupGuide";
 import { useIsMobile } from "../../hooks/useIsMobile";
@@ -55,6 +57,7 @@ import EditAgentDrawer from "./components/EditAgentDrawer";
 import CreateFromExpertDrawer, {
   type CreateFromTemplateSource,
 } from "./components/CreateFromExpertDrawer";
+import ManagedDrawer from "./components/ManagedDrawer";
 import TeamDrawer from "./components/TeamDrawer";
 import type { TeamRecord } from "../../api/modules/teams";
 import { TeamCard } from "./components/TeamCard";
@@ -77,6 +80,7 @@ type TabKey = "my" | "teams" | "library" | "market"; // fork: + "library"
 function tabFromQuery(raw: string | null): TabKey | null {
   if (raw === "my" || raw === "teams" || raw === "library" || raw === "market")
     return raw; // fork: "library" is its own tab again
+  if (raw === "managed") return "my";
   return null;
 }
 
@@ -315,6 +319,7 @@ export default function ExpertsPage() {
   const [teamDrawer, setTeamDrawer] = useState<
     { mode: "create" } | { mode: "edit"; team: OctopAgent } | null
   >(null);
+  const [managedOpen, setManagedOpen] = useState(false);
 
   const handleEditSaved = useCallback(
     (
@@ -495,6 +500,19 @@ export default function ExpertsPage() {
                   }
                 : undefined
             }
+            moreActions={[
+              {
+                label: (
+                  <span className={styles.titleWithBeta}>
+                    {t("experts.managed.createTitle")}
+                    <BetaBadge />
+                  </span>
+                ),
+                onClick: () => setManagedOpen(true),
+                icon: <Cable size={14} />,
+                type: "default",
+              },
+            ]}
           />
         </div>
       );
@@ -549,6 +567,17 @@ export default function ExpertsPage() {
                 </button>
               </Tooltip>
             ) : null}
+            <button
+              className={styles.toolbarBtn}
+              type="button"
+              onClick={() => setManagedOpen(true)}
+            >
+              <Cable size={14} />
+              <span className={styles.titleWithBeta}>
+                {t("experts.managed.createTitle")}
+                <BetaBadge />
+              </span>
+            </button>
             <button
               className={styles.toolbarBtnPrimary}
               type="button"
@@ -839,6 +868,18 @@ export default function ExpertsPage() {
         lang={lang}
         onClose={() => setCreateSource(null)}
         onCreated={handleCreated}
+      />
+
+      <ManagedDrawer
+        open={managedOpen}
+        onClose={() => setManagedOpen(false)}
+        onCreated={(agentId) => {
+          setManagedOpen(false);
+          setActiveTab("my");
+          setNewAgentId(agentId);
+          void refreshAgents({ silent: true, force: true });
+          setTimeout(() => setNewAgentId(null), 1000);
+        }}
       />
 
       <TeamDrawer

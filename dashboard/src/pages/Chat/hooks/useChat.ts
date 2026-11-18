@@ -24,6 +24,7 @@ import {
   type ContentBlock,
 } from "../../../utils/messageParser";
 import { normalizeComposerContext } from "../utils/chatMessages";
+import { isPlaceholderToolName, preferToolName } from "./toolDisplayNames";
 import { resolveMessageTimestampMs } from "../../../utils/formatMessageTime";
 import { inferKindFromNameAndMime } from "../utils/chatAttachments";
 import {
@@ -33,6 +34,7 @@ import {
 import { injectPendingHitlMessage } from "../../../utils/injectPendingHitlMessage";
 import {
   mergeHistoryWithLocalTail,
+  preserveLocalComposerContext,
   preferLocalTranscript,
   restoreUnpersistedTurn,
   serverCaughtUp,
@@ -533,8 +535,40 @@ function convertCallEntries(entries: CallEntry[]): ChatMessage[] {
   for (const cur of raw) {
     const { _toolKind, ...current } = cur;
     if (_toolKind === "call") {
-      merged.push(current);
       const callId = current.toolData?.callId;
+      const existingIdx = callId ? callIdToMergedIndex[callId] : undefined;
+      if (existingIdx !== undefined) {
+        const existing = merged[existingIdx];
+        const name = preferToolName(
+          current.toolData?.name,
+          existing.toolData?.name,
+        );
+        const existingArgs = existing.toolData?.arguments?.trim() ?? "";
+        const incomingArgs = current.toolData?.arguments?.trim() ?? "";
+        const argumentsJson =
+          !existingArgs || existingArgs === "{}"
+            ? incomingArgs || existing.toolData?.arguments
+            : existing.toolData?.arguments;
+        if (
+          (name && name !== existing.toolData?.name) ||
+          argumentsJson !== existing.toolData?.arguments
+        ) {
+          merged[existingIdx] = {
+            ...existing,
+            toolData: {
+              ...existing.toolData,
+              name: name || existing.toolData?.name,
+              arguments: argumentsJson,
+              displayName: isPlaceholderToolName(current.toolData?.name)
+                ? existing.toolData?.displayName
+                : current.toolData?.displayName ||
+                  existing.toolData?.displayName,
+            },
+          };
+        }
+        continue;
+      }
+      merged.push(current);
       if (callId) callIdToMergedIndex[callId] = merged.length - 1;
       continue;
     }
@@ -805,6 +839,7 @@ async function loadThreadHistory(
     syncSessionArtifacts,
     syncSessionConversationMode,
     syncSessionHitlPolicy,
+    syncSessionMode,
   } = await import("./useSessions");
   const limit = params.limit ?? CHAT_HISTORY_PAGE_SIZE;
   const offset = params.offset ?? 0;
@@ -828,6 +863,7 @@ async function loadThreadHistory(
       history.pending_plan_path,
     );
     syncSessionHitlPolicy(threadId, history.hitl_policy);
+    syncSessionMode(threadId, history.session_mode);
     chatStore.setPendingPlanPath(threadId, history.pending_plan_path);
   }
   const messages = injectPendingHitlMessage(
@@ -1002,6 +1038,7 @@ export function useChat(
       reasoningEffort?: string | null,
       conversationMode?: "ask" | "plan" | "craft" | null,
       hitlPolicy?: HitlSessionPolicy | null,
+      sessionMode?: string | null,
     ) => {
       const key = storeKey || stableSessionId;
 
@@ -1047,6 +1084,7 @@ export function useChat(
         conversationMode,
         hitlPolicy,
         userMsg.id,
+        sessionMode,
       );
     },
     [currentUser, stableSessionId],
@@ -1147,10 +1185,13 @@ export function useChat(
           retainedHistoryPrefix(loaded.messages, current.messages).length > 0;
         chatStore.setHistoryPage(
           key,
-          mergeHistoryWithLocalTail(
-            loaded.messages,
+          preserveLocalComposerContext(
+            mergeHistoryWithLocalTail(
+              loaded.messages,
+              local,
+              current.isStreaming,
+            ),
             local,
-            current.isStreaming,
           ),
           {
             hasMore: keptOlder ? current.historyHasMore : loaded.hasMore,
@@ -1316,7 +1357,10 @@ export function useChat(
           retainedHistoryPrefix(latest, current.messages).length > 0;
         chatStore.setHistoryPage(
           key,
-          mergeHistoryWithLocalTail(latest, local, current.isStreaming),
+          preserveLocalComposerContext(
+            mergeHistoryWithLocalTail(latest, local, current.isStreaming),
+            local,
+          ),
           {
             hasMore: keptOlder ? current.historyHasMore : hasMore,
             nextOffset: keptOlder ? current.historyNextOffset : nextOffset,

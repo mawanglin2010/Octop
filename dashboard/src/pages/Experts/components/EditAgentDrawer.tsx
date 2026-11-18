@@ -1,5 +1,6 @@
 // dashboard/src/pages/Experts/components/EditAgentDrawer.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Alert,
@@ -13,9 +14,18 @@ import {
   Modal,
   Select,
   Spin,
+  Switch,
 } from "antd";
 
 import { MoreHorizontal } from "lucide-react";
+import {
+  acpApi,
+  acpSessionModeText,
+  catalogOffersUnattendedMode,
+  isUnattendedSessionMode,
+  permissionForSessionMode,
+} from "../../../api/modules/acp";
+import { useAcpSessionModes } from "../../../hooks/useAcpSessionModes";
 import { request } from "../../../api/request";
 import { AgentAdvancedConfigFields } from "../../../components/AgentAdvancedConfigFields";
 import { TextAssistBar } from "../../../components/TextAssistBar";
@@ -59,6 +69,9 @@ import {
   buildAgentRuntimeRequest,
   omitAgentRuntimeConfig,
   readAgentRuntimeFormValues,
+  type AgentCompactionFormValues,
+  type AgentRuntimeApiFields,
+  type AgentRuntimeFormValues,
 } from "../../../utils/agentRuntimeConfig";
 import { isBridgeAgentId } from "../../../utils/remoteExpert";
 import EditExpertDrawerTitle from "./EditExpertDrawerTitle";
@@ -74,7 +87,7 @@ import {
 } from "./welcomeManifest";
 import { fetchConfigMdFiles } from "./expertFileGroups";
 import {
-  buildBackendSpec,
+  backendSpecForAgentSave,
   DEFAULT_BACKEND,
   ensureBubblewrapAfterProbe,
   ensureBwrapMessage,
@@ -88,6 +101,8 @@ import {
   type PathMapping,
 } from "./agentBackendForm";
 import AgentBackendFields from "./AgentBackendFields";
+import ManagedRunnerPicker from "./ManagedRunnerPicker";
+import RootDirSelect from "./RootDirSelect";
 import { ResourceVisibilityFormItem } from "../../../components/ResourceVisibilityFields";
 import type { ResourceVisibilityMode } from "../../../api/modules/userGroups";
 import ExpertComposerDefaultsFields from "./ExpertComposerDefaultsFields";
@@ -95,24 +110,21 @@ import SkillCatalogDrawer from "./SkillCatalogDrawer";
 import SubagentCatalogDrawer from "./SubagentCatalogDrawer";
 import styles from "../index.module.less";
 
-interface AgentDetail {
+interface AgentDetail extends AgentRuntimeApiFields {
   id: string;
   name: string;
   description: string | null;
   default_model: string | null;
   color?: string | null;
   icon_url?: string | null;
-  max_iters?: number | null;
-  max_input_length?: number | null;
-  temperature?: number | null;
-  top_p?: number | null;
-  max_tokens?: number | null;
+  compaction?: AgentCompactionFormValues | null;
   welcome_message?: string | null;
   is_shared?: boolean;
   visibility?: ResourceVisibilityMode | null;
   group_ids?: string[];
   knowledge_base_ids?: string[];
   mcp_servers?: string[];
+  skill_package_ids?: string[];
   config?: Record<string, unknown>;
 }
 
@@ -144,7 +156,7 @@ function subagentFilePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
-interface EditFormValues {
+interface EditFormValues extends AgentRuntimeFormValues {
   name: string;
   description: string;
   welcome_message?: string;
@@ -154,14 +166,13 @@ interface EditFormValues {
   composite_default: string;
   root_dir?: string;
   workspace_dir?: string;
-  max_iters?: number;
-  max_input_length?: number;
-  temperature?: number;
-  top_p?: number;
-  max_tokens?: number;
   enable_trajectory?: boolean;
   knowledge_base_ids?: string[];
   mcp_servers?: string[];
+  skill_package_ids?: string[];
+  runner?: string;
+  permission_mode?: boolean;
+  session_mode?: string;
 }
 
 interface EditAgentDrawerProps {
@@ -239,12 +250,27 @@ function EditAgentDrawerBody({
   onSaveReady,
   onSavingChange,
 }: EditAgentDrawerBodyProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { modal, message } = App.useApp();
   const { refresh } = useAgent();
   const skillDisplayName = useSkillDisplayName();
   const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
   const [form] = Form.useForm<EditFormValues>();
+  const watchedRunner = Form.useWatch("runner", form);
+  const sessionModes = useAcpSessionModes(
+    agent.kind === "managed" ? watchedRunner : "",
+  );
+
+  useEffect(() => {
+    if (agent.kind !== "managed" || sessionModes.length === 0) return;
+    const current = String(form.getFieldValue("session_mode") ?? "");
+    if (sessionModes.some((mode) => mode.id === current)) return;
+    const yolo = form.getFieldValue("permission_mode") === true;
+    const preferred = yolo
+      ? sessionModes.find((mode) => isUnattendedSessionMode(mode.id))
+      : undefined;
+    form.setFieldValue("session_mode", (preferred ?? sessionModes[0]).id);
+  }, [agent.kind, form, sessionModes]);
   const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([]);
   const [agentSkills, setAgentSkills] = useState<SkillSummary[]>([]);
   const [agentSubagents, setAgentSubagents] = useState<SubagentSummary[]>([]);
@@ -253,6 +279,12 @@ function EditAgentDrawerBody({
     useAgentFormResources(true, agent.agent_id);
   const [pathMappings, setPathMappings] = useState<PathMapping[]>([]);
   const [agentConfig, setAgentConfig] = useState<Record<string, unknown>>({});
+  const [runners, setRunners] = useState<string[]>([]);
+  const [runnersReady, setRunnersReady] = useState(false);
+  const [skillPackages, setSkillPackages] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [skillPackagesLoading, setSkillPackagesLoading] = useState(false);
   const [colorPalette, setColorPalette] = useState<string>(
     () => parseStoredColor(agent.color) ?? DEFAULT_PALETTE,
   );
@@ -294,6 +326,14 @@ function EditAgentDrawerBody({
     rootDir: watchedRootDir,
     workspaceDir: workspaceDirFromConfig,
   });
+  const runnerChoices = useMemo(() => {
+    const current =
+      typeof agentConfig.managed_runner === "string"
+        ? agentConfig.managed_runner.trim()
+        : "";
+    if (current && !runners.includes(current)) return [current, ...runners];
+    return runners;
+  }, [agentConfig.managed_runner, runners]);
 
   useEffect(() => {
     let cancelled = false;
@@ -337,10 +377,21 @@ function EditAgentDrawerBody({
             typeof cfg.workspace_dir === "string" ? cfg.workspace_dir : "",
           ...readAgentRuntimeFormValues(ag),
           enable_trajectory: cfg.enable_trajectory !== false,
+          runner:
+            typeof cfg.managed_runner === "string" ? cfg.managed_runner : "",
+          permission_mode: cfg.managed_permission_mode === "yolo",
+          session_mode:
+            typeof cfg.managed_session_mode === "string" &&
+            cfg.managed_session_mode.trim()
+              ? cfg.managed_session_mode.trim()
+              : String(form.getFieldValue("session_mode") ?? ""),
           knowledge_base_ids: Array.isArray(ag.knowledge_base_ids)
             ? ag.knowledge_base_ids
             : [],
           mcp_servers: Array.isArray(ag.mcp_servers) ? ag.mcp_servers : [],
+          skill_package_ids: Array.isArray(ag.skill_package_ids)
+            ? ag.skill_package_ids
+            : [],
         });
         const nextVisibility: ResourceVisibilityMode =
           ag.visibility === "groups" ||
@@ -418,6 +469,55 @@ function EditAgentDrawerBody({
     };
   }, [agent.agent_id, agent.state, form, message, t]);
 
+  useEffect(() => {
+    if (agent.kind !== "managed") return;
+    let cancelled = false;
+    setRunnersReady(false);
+    acpApi
+      .getGlobalRunners()
+      .then((data) => {
+        if (cancelled) return;
+        setRunners(
+          Object.entries(data.runners)
+            .filter(([, spec]) => spec.enabled)
+            .map(([name]) => name),
+        );
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setRunners([]);
+          message.error(
+            apiErrorMessage(err, t("experts.managed.loadFailed"), t),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRunnersReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.agent_id, agent.kind, message, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSkillPackagesLoading(true);
+    skillPackagesApi
+      .list()
+      .then((packages) => {
+        if (!cancelled) setSkillPackages(packages);
+      })
+      .catch(() => {
+        if (!cancelled) setSkillPackages([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSkillPackagesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.agent_id]);
+
   const handleSave = useCallback(async () => {
     const values = await form.validateFields();
     if (values.backend_choice === "composite") {
@@ -452,7 +552,9 @@ function EditAgentDrawerBody({
         }
       }
 
-      const backendSpec = buildBackendSpec(
+      const backendSpec = backendSpecForAgentSave(
+        agent.kind,
+        agentConfig.backend,
         values.backend_choice,
         values.composite_default ?? DEFAULT_BACKEND,
         pathMappings,
@@ -462,12 +564,30 @@ function EditAgentDrawerBody({
       const nextColor = isCuratedPalette(colorPalette)
         ? expertPaletteColor(colorPalette)
         : colorPalette;
+      const configPatch: Record<string, unknown> =
+        agent.kind === "managed"
+          ? {}
+          : { conversation_mode: values.conversation_mode };
+      const managedRunner = values.runner?.trim();
+      if (agent.kind === "managed" && managedRunner) {
+        configPatch.managed_runner = managedRunner;
+        const sessionMode = values.session_mode?.trim() ?? "";
+        configPatch.managed_session_mode = sessionMode;
+        configPatch.managed_permission_mode = permissionForSessionMode(
+          sessionModes,
+          sessionMode,
+          values.permission_mode === true,
+        );
+      }
       const nextConfig = omitAgentRuntimeConfig({
         ...agentConfig,
         backend: backendSpec,
         enable_trajectory: values.enable_trajectory === true,
-        conversation_mode: values.conversation_mode,
+        ...configPatch,
       });
+      if (agent.kind === "managed") {
+        delete nextConfig.conversation_mode;
+      }
       delete nextConfig.color;
       delete nextConfig.icon_name;
       delete nextConfig.icon_url;
@@ -512,17 +632,28 @@ function EditAgentDrawerBody({
           is_shared: expertVisibility !== "owner",
           visibility: expertVisibility,
           group_ids: expertVisibility === "groups" ? expertGroupIds : [],
-          default_model: defaultModelFromForm(values.default_model),
+          ...(agent.kind === "managed"
+            ? {
+                knowledge_base_ids: stored.knowledge_base_ids ?? [],
+                mcp_servers: stored.mcp_servers ?? [],
+                skill_package_ids: stored.skill_package_ids ?? [],
+              }
+            : {
+                default_model: defaultModelFromForm(values.default_model),
+                knowledge_base_ids: stored.knowledge_base_ids ?? [],
+                mcp_servers: stored.mcp_servers ?? [],
+                ...(skillPackagesSupported
+                  ? { skill_package_ids: stored.skill_package_ids ?? [] }
+                  : {}),
+                ...buildAgentRuntimeRequest(values, { clearMissing: true }),
+              }),
           color: nextColor,
           config: nextConfig,
           welcome_message: stored.welcome_message ?? "",
-          knowledge_base_ids: stored.knowledge_base_ids ?? [],
-          mcp_servers: stored.mcp_servers ?? [],
-          ...buildAgentRuntimeRequest(values, { clearMissing: true }),
         }),
       });
 
-      if (!remote && !skillPackagesSupported) {
+      if (!remote && agent.kind !== "managed" && !skillPackagesSupported) {
         try {
           await skillPackagesApi.replaceMounted(agent.agent_id, []);
         } catch (pkgErr) {
@@ -556,6 +687,7 @@ function EditAgentDrawerBody({
     }
   }, [
     agent.agent_id,
+    agent.kind,
     agent.state,
     agentConfig,
     remote,
@@ -879,7 +1011,7 @@ function EditAgentDrawerBody({
                 className={styles.textAssistField}
               >
                 <Input.TextArea
-                  autoSize={{ minRows: 2, maxRows: 5 }}
+                  rows={3}
                   placeholder={t("experts.welcomeMessagePlaceholder")}
                 />
               </Form.Item>
@@ -893,18 +1025,127 @@ function EditAgentDrawerBody({
                   form.setFieldsValue({ welcome_message: text })
                 }
               />
-              <AgentBackendFields
-                backends={backends}
-                backendsLoading={backendsLoading}
-                backendChoice={backendChoice}
-                pathMappings={pathMappings}
-                rootDirMode="edit"
-                disabled
-                skipHostFilesystem={remote}
-                onAddPathMapping={addPathMapping}
-                onRemovePathMapping={removePathMapping}
-                onUpdatePathMapping={updatePathMapping}
-              />
+              {agent.kind === "managed" ? (
+                <>
+                  {runnersReady && runnerChoices.length === 0 ? (
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                      message={t("experts.managed.noRunners")}
+                    />
+                  ) : null}
+                  <Form.Item
+                    name="runner"
+                    colon={false}
+                    className={styles.runnerField}
+                    label={
+                      <span className={styles.runnerFieldLabel}>
+                        <span>{t("experts.managed.runner")}</span>
+                        <Link to="/acp" className={styles.runnerManageLink}>
+                          {t("experts.managed.manageAcp")}
+                        </Link>
+                      </span>
+                    }
+                    rules={[
+                      {
+                        required: true,
+                        message: t("experts.managed.runnerRequired"),
+                      },
+                    ]}
+                  >
+                    <ManagedRunnerPicker runners={runnerChoices} />
+                  </Form.Item>
+                  {sessionModes.length > 0 ? (
+                    <Form.Item
+                      name="session_mode"
+                      label={t("chat.conversationMode.picker")}
+                      extra={t("experts.managed.sessionModeHint")}
+                    >
+                      <Select
+                        options={sessionModes.map((mode) => ({
+                          value: mode.id,
+                          label: acpSessionModeText(
+                            mode,
+                            i18n.language,
+                            "name",
+                          ),
+                          title: acpSessionModeText(
+                            mode,
+                            i18n.language,
+                            "hint",
+                          ),
+                        }))}
+                      />
+                    </Form.Item>
+                  ) : null}
+                  {catalogOffersUnattendedMode(sessionModes) ? null : (
+                    <Form.Item
+                      name="permission_mode"
+                      label={t("experts.managed.yolo")}
+                      valuePropName="checked"
+                      extra={t("experts.managed.yoloHint")}
+                    >
+                      <Switch />
+                    </Form.Item>
+                  )}
+                  <Form.Item
+                    name="workspace_dir"
+                    label={t("experts.workspaceDir")}
+                    extra={t("experts.workspaceDirImmutableHint")}
+                  >
+                    <RootDirSelect disabled />
+                  </Form.Item>
+                </>
+              ) : (
+                <AgentBackendFields
+                  backends={backends}
+                  backendsLoading={backendsLoading}
+                  backendChoice={backendChoice}
+                  pathMappings={pathMappings}
+                  rootDirMode="edit"
+                  disabled
+                  skipHostFilesystem={remote}
+                  onAddPathMapping={addPathMapping}
+                  onRemovePathMapping={removePathMapping}
+                  onUpdatePathMapping={updatePathMapping}
+                />
+              )}
+              {agent.kind === "managed" ? null : (
+                <>
+                  <Form.Item
+                    name="conversation_mode"
+                    label={t("experts.defaultModeLabel")}
+                    tooltip={t("experts.defaultModeHint")}
+                  >
+                    <Select
+                      options={CONVERSATION_MODES.map((mode) => ({
+                        value: mode,
+                        label: t(`chat.conversationMode.${mode}`),
+                      }))}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="default_model"
+                    label={t("experts.defaultModelLabel")}
+                  >
+                    <Select
+                      loading={modelsLoading}
+                      placeholder={t("experts.defaultModelPlaceholder")}
+                      options={buildModelSelectOptions(
+                        models,
+                        t("experts.defaultModelAuto"),
+                      )}
+                      showSearch
+                      filterOption={(input, opt) =>
+                        ((opt?.label as string) ?? "")
+                          .toLowerCase()
+                          .includes(input.toLowerCase())
+                      }
+                    />
+                  </Form.Item>
+                </>
+              )}
               <ResourceVisibilityFormItem
                 allowOwner
                 visibility={expertVisibility}
@@ -917,52 +1158,35 @@ function EditAgentDrawerBody({
                   );
                 }}
               />
+              <Form.Item
+                name="skill_package_ids"
+                label={t("experts.skillPackagesLabel")}
+                extra={
+                  agent.kind === "managed"
+                    ? t("experts.managedSkillPackagesHint")
+                    : skillPackagesSupported
+                    ? t("experts.skillPackagesHint")
+                    : t("experts.skillPackagesUnsupportedHint")
+                }
+              >
+                <Select
+                  mode="multiple"
+                  allowClear
+                  disabled={agent.kind !== "managed" && !skillPackagesSupported}
+                  loading={skillPackagesLoading}
+                  options={skillPackages.map((pack) => ({
+                    value: pack.id,
+                    label: pack.name,
+                  }))}
+                  placeholder={t("experts.skillPackagesPlaceholder")}
+                />
+              </Form.Item>
+              <ExpertComposerDefaultsFields agentId={agent.agent_id} />
             </Form>
           </div>
           <MoreConfigCollapse>
             <Form form={form} layout="vertical" size="middle">
-              <Form.Item
-                name="conversation_mode"
-                label={t("experts.defaultModeLabel")}
-                tooltip={t("experts.defaultModeHint")}
-              >
-                <Select
-                  options={CONVERSATION_MODES.map((mode) => ({
-                    value: mode,
-                    label: t(`chat.conversationMode.${mode}`),
-                  }))}
-                />
-              </Form.Item>
-              <Form.Item
-                name="default_model"
-                label={t("experts.defaultModelLabel")}
-              >
-                <Select
-                  loading={modelsLoading}
-                  placeholder={t("experts.defaultModelPlaceholder")}
-                  options={buildModelSelectOptions(
-                    models,
-                    t("experts.defaultModelAuto"),
-                  )}
-                  showSearch
-                  filterOption={(input, opt) =>
-                    ((opt?.label as string) ?? "")
-                      .toLowerCase()
-                      .includes(input.toLowerCase())
-                  }
-                />
-              </Form.Item>
-
               <AgentTrajectoryField />
-              <ExpertComposerDefaultsFields agentId={agent.agent_id} />
-              {!skillPackagesSupported ? (
-                <Alert
-                  type="info"
-                  showIcon
-                  style={{ marginTop: 12 }}
-                  message={t("experts.skillPackagesUnsupportedHint")}
-                />
-              ) : null}
             </Form>
 
             {isAgentChatReady(agent.state) ? (
@@ -1378,22 +1602,24 @@ function EditAgentDrawerBody({
                 />
               </div>
             )}
-            <Collapse
-              ghost
-              className={styles.drawerCollapse}
-              style={{ width: "100%" }}
-              items={[
-                {
-                  key: "advanced",
-                  label: t("experts.advancedOptions"),
-                  children: (
-                    <Form form={form} layout="vertical" size="middle">
-                      <AgentAdvancedConfigFields />
-                    </Form>
-                  ),
-                },
-              ]}
-            />
+            {agent.kind === "managed" ? null : (
+              <Collapse
+                ghost
+                className={styles.drawerCollapse}
+                style={{ width: "100%" }}
+                items={[
+                  {
+                    key: "advanced",
+                    label: t("experts.advancedOptions"),
+                    children: (
+                      <Form form={form} layout="vertical" size="middle">
+                        <AgentAdvancedConfigFields />
+                      </Form>
+                    ),
+                  },
+                ]}
+              />
+            )}
           </MoreConfigCollapse>
         </>
       )}
@@ -1469,9 +1695,11 @@ export default function EditAgentDrawer({
     <Drawer
       open={open}
       title={<EditExpertDrawerTitle agent={agent} />}
-      width={520}
+      width={agent?.kind === "managed" ? 600 : 520}
       onClose={onClose}
       destroyOnHidden
+      className={styles.expertDrawer}
+      rootClassName={styles.expertDrawerRoot}
       footer={
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button className={styles.drawerCancelBtn} onClick={onClose}>
