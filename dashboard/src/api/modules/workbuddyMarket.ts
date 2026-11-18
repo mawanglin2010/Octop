@@ -70,3 +70,78 @@ export const workbuddyMarketApi = {
     });
   },
 };
+
+// --- experts ---------------------------------------------------------------
+
+export interface WorkBuddyExpertCard {
+  plugin: string;
+  template_id: string;
+  nickname: WbText;
+  profession: WbText;
+  description: WbText;
+  category_id: string;
+  category: WbText;
+  tags: { zh?: string[]; en?: string[] };
+  quick_prompts: { zh?: string[]; en?: string[] };
+  avatar_url: string | null;
+  author: string;
+  updated_at: string;
+}
+
+export interface WorkBuddyExpertList {
+  items: WorkBuddyExpertCard[];
+  categories: (WbText & { id: string })[];
+  version: string;
+}
+
+export type WorkBuddyMcpStatus =
+  | "ok"
+  | "internal"
+  | "stdio"
+  | "sse"
+  | "needs_secret"
+  | "invalid";
+
+export interface WorkBuddyExpertDetail extends WorkBuddyExpertCard {
+  prompt: string;
+  skills: { name: string; description: string; file_count: number }[];
+  mcp: {
+    name: string;
+    transport: string;
+    target: string;
+    status: WorkBuddyMcpStatus;
+  }[];
+  connectors: string[];
+}
+
+export interface WorkBuddyPrepareResult {
+  expert_id: string;
+  mcp_servers: string[];
+  skipped_mcp: { name: string; reason: string }[];
+  connectors: string[];
+}
+
+export const workbuddyExpertsApi = {
+  list: (
+    params: { q?: string; category?: string; refresh?: boolean } = {},
+    signal?: AbortSignal,
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.category) qs.set("category", params.category);
+    if (params.refresh) qs.set("refresh", "true");
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<WorkBuddyExpertList>(`/workbuddy/experts${suffix}`, {
+      signal,
+    });
+  },
+  get: (plugin: string) =>
+    request<WorkBuddyExpertDetail>(
+      `/workbuddy/experts/${encodeURIComponent(plugin)}`,
+    ),
+  prepare: (plugin: string, addMcp = true) =>
+    request<WorkBuddyPrepareResult>(
+      `/workbuddy/experts/${encodeURIComponent(plugin)}/prepare`,
+      { method: "POST", body: JSON.stringify({ add_mcp: addMcp }) },
+    ),
+};

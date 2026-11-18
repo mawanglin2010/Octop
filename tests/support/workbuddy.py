@@ -102,3 +102,113 @@ def fake_skill_market_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     skills.reset_cache_for_tests()
     yield zip_path
     skills.reset_cache_for_tests()
+
+
+EXPERT_CENTER = {
+    "version": "1.0.0",
+    "categories": [
+        {"id": "04-DataAI", "name": {"zh": "数据智能", "en": "Data & AI"}},
+        {"id": "08-FinanceInvestment", "name": {"zh": "金融投资", "en": "Finance"}},
+    ],
+    "experts": [
+        {
+            "id": "FormExpert",
+            "plugin": "form-expert",
+            "expertType": "agent",
+            "categoryId": "04-DataAI",
+            "displayName": {"zh": "表哥", "en": "Formy"},
+            "profession": {"zh": "表单专家", "en": "Form Expert"},
+            "description": {"zh": "帮你建表单", "en": "Builds forms"},
+            "avatar": "/avatars/FormExpert.png",
+            "tags": [{"zh": "表单", "en": "Forms"}],
+            "quickPrompts": [{"zh": "建一个报名表", "en": "Make a sign-up form"}],
+        },
+        {
+            "id": "FinTeam",
+            "plugin": "fin-team",
+            "expertType": "team",
+            "categoryId": "08-FinanceInvestment",
+            "profession": {"zh": "金融团队"},
+        },
+        {"id": "Bad", "plugin": "../evil", "expertType": "agent"},
+    ],
+}
+
+FORM_PLUGIN_JSON = {
+    "name": "form-expert",
+    "version": "1.2.0",
+    "expertType": "agent",
+    "agentName": "form-expert",
+    "agents": ["./agents/form-expert.md"],
+    "skills": ["./skills/forms"],
+    "displayName": {"zh": "表哥", "en": "Formy"},
+    "profession": {"zh": "表单专家", "en": "Form Expert"},
+    "displayDescription": {"zh": "用 MCP 建表单", "en": "Builds forms over MCP"},
+    "quickPrompts": [{"zh": "建一个报名表", "en": "Make a sign-up form"}],
+    "dependencies": {"mcpServers": "./.mcp.json", "connectors": ["kdocs"]},
+}
+
+FORM_MCP = {
+    "mcpServers": {
+        "forms": {"type": "http", "url": "https://forms.example.com/mcp"},
+        "intranet": {"type": "http", "url": "https://hr.mcp.woa.com/x"},
+        "local-tool": {"command": "node", "args": ["dist/server.js"]},
+        "legacy": {"type": "sse", "url": "https://sse.example.com/sse"},
+        "secret": {
+            "type": "http",
+            "url": "https://secret.example.com/mcp",
+            "headers": {"Authorization": "Bearer ${user_config.TOKEN}"},
+        },
+    }
+}
+
+
+def build_expert_bundle(path: Path) -> Path:
+    import io  # noqa: PLC0415
+    import tarfile  # noqa: PLC0415
+
+    def add(tar: tarfile.TarFile, name: str, data: bytes) -> None:
+        info = tarfile.TarInfo(name)
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+
+    with tarfile.open(path, "w:gz") as tar:
+        add(tar, "./.codebuddy-plugin/plugin.json", json.dumps(FORM_PLUGIN_JSON).encode())
+        add(tar, "./.mcp.json", json.dumps(FORM_MCP).encode())
+        add(
+            tar,
+            "./agents/form-expert.md",
+            b"---\nname: form-expert\n---\n\n# Form Expert\n\nYou build forms.\n",
+        )
+        add(tar, "./skills/forms/SKILL.md", b"---\nname: forms\ndescription: Make forms\n---\nx\n")
+        add(tar, "./skills/forms/references/guide.md", b"guide")
+        add(tar, "./license/forms.LICENSE", b"MIT")
+        add(tar, "./README.md", b"readme")
+        add(tar, "../escape.md", b"nope")
+        link = tarfile.TarInfo("./skills/forms/link")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "/etc/passwd"
+        tar.addfile(link)
+    return path
+
+
+@pytest.fixture(name="fake_expert_market")
+def fake_expert_market_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """Serve a fake WorkBuddy expert center and one bundle (no network)."""
+    from octop.infra.workbuddy import archive, experts
+
+    center = tmp_path / "expert_center.json"
+    center.write_text(json.dumps(EXPERT_CENTER, ensure_ascii=False), encoding="utf-8")
+    bundle = build_expert_bundle(tmp_path / "form-expert.tar.gz")
+
+    def fake_fetch(name: str, url: str, **_kw: object) -> archive.CachedFile:
+        if name == "expert_center.json":
+            return archive.CachedFile(center, "center-v1", 0.0)
+        if name == "experts/form-expert.tar.gz":
+            return archive.CachedFile(bundle, "bundle-v1", 0.0)
+        raise archive.WorkBuddyFetchError(f"not faked: {name}")
+
+    monkeypatch.setattr(experts, "fetch_cached", fake_fetch)
+    experts.reset_cache_for_tests()
+    yield tmp_path
+    experts.reset_cache_for_tests()

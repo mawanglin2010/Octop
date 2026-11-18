@@ -128,6 +128,8 @@ interface CreateFromExpertDrawerProps {
   lang: "zh" | "en";
   onClose: () => void;
   onCreated: (agentId: string, agentName: string) => void;
+  /** fork: MCP servers to pre-select (WorkBuddy experts). */
+  initialMcpServers?: string[];
 }
 
 function sourceTitle(
@@ -229,6 +231,7 @@ export default function CreateFromExpertDrawer({
   lang,
   onClose,
   onCreated,
+  initialMcpServers, // fork
 }: CreateFromExpertDrawerProps) {
   const { t } = useTranslation();
   const allowedBackendTypes = useCurrentUser()?.allowed_backend_types;
@@ -347,7 +350,7 @@ export default function CreateFromExpertDrawer({
       workspace_dir_auto: "",
       skill_package_ids: [],
       knowledge_base_ids: [],
-      mcp_servers: [],
+      mcp_servers: initialMcpServers ?? [], // fork
       enable_trajectory: true,
       ...emptyAgentRuntimeFormValues(),
     });
@@ -400,7 +403,15 @@ export default function CreateFromExpertDrawer({
     return () => {
       cancelled = true;
     };
-  }, [open, source, sourceKey, lang, form, createBackendChoice]);
+  }, [
+    open,
+    source,
+    sourceKey,
+    lang,
+    form,
+    createBackendChoice,
+    initialMcpServers,
+  ]); // fork: + initialMcpServers
 
   useEffect(() => {
     if (!open) return;
