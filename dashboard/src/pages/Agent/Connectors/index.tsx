@@ -5,6 +5,7 @@ import { message } from "@/utils/antdMessage";
 import {
   Activity,
   Blocks,
+  Briefcase, // fork
   CheckCircle2,
   ClipboardPaste,
   Copy,
@@ -60,6 +61,8 @@ import { ConnectorCard } from "./ConnectorCard";
 import { AgentlyAuth } from "./AgentlyAuth";
 import { ConnectorInstanceCard } from "./ConnectorInstanceCard";
 import { CustomMcpTab } from "./CustomMcpTab";
+import WorkBuddyConnectorsTab from "../../WorkBuddy/WorkBuddyConnectorsTab"; // fork
+import { useWbText } from "../../WorkBuddy/wbText"; // fork
 import {
   INLINE_CREDENTIAL_GUIDE_KINDS,
   HIDE_INLINE_FIELD_GUIDE_KINDS,
@@ -2354,7 +2357,7 @@ function ConnectorConfigDrawer({
   );
 }
 
-type ConnectorTab = "enabled" | "builtin" | "custom";
+type ConnectorTab = "enabled" | "builtin" | "custom" | "workbuddy"; // fork: + workbuddy
 
 const CONNECTOR_TABS: TabBarItem<ConnectorTab>[] = [
   { key: "enabled", labelKey: "connectors.tabEnabled", icon: Link2 },
@@ -2377,12 +2380,31 @@ export default function ConnectorsPage() {
   >(null);
   const { catalog, instances, loading, refresh } = useConnectorInstances();
   const user = useCurrentUser();
+  const { tx: wbTx } = useWbText(); // fork
   const visibleConnectorTabs = useMemo(
-    () =>
-      CONNECTOR_TABS.filter((tab) =>
-        userCan(user, CONNECTOR_TAB_PERMISSIONS[tab.key]),
+    () => [
+      ...CONNECTOR_TABS.filter(
+        (tab) =>
+          tab.key !== "workbuddy" &&
+          userCan(
+            user,
+            CONNECTOR_TAB_PERMISSIONS[
+              tab.key as keyof typeof CONNECTOR_TAB_PERMISSIONS
+            ],
+          ),
       ),
-    [user],
+      // fork: WorkBuddy connector market (admins install into custom MCP)
+      ...(user?.role === "admin"
+        ? [
+            {
+              key: "workbuddy" as const,
+              labelKey: wbTx("WorkBuddy 连接器", "WorkBuddy Connectors"),
+              icon: Briefcase,
+            },
+          ]
+        : []),
+    ],
+    [user, wbTx],
   );
   const resolvedConnectorTab = visibleConnectorTabs.some(
     (tab) => tab.key === activeTab,
@@ -2545,6 +2567,15 @@ export default function ConnectorsPage() {
     >
       {resolvedConnectorTab === "custom" ? (
         <CustomMcpTab focusServerName={customFocusServerName} />
+      ) : resolvedConnectorTab === "workbuddy" ? (
+        // fork: WorkBuddy connector market
+        <WorkBuddyConnectorsTab
+          onInstalled={(serverName) => {
+            setCustomFocusServerName(serverName || null);
+            setActiveTab("custom");
+            void refresh();
+          }}
+        />
       ) : resolvedConnectorTab === "enabled" ? (
         loading ? (
           <div className={styles.loadingState}>

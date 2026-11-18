@@ -24,6 +24,7 @@ import { Input, Tabs, Segmented, Tooltip } from "antd";
 import { message } from "@/utils/antdMessage";
 
 import {
+  Briefcase, // fork: WorkBuddy experts tab
   Cable,
   Cloudy,
   CopyPlus,
@@ -64,6 +65,8 @@ import { TeamCard } from "./components/TeamCard";
 import AgentExpertsTable from "./components/AgentExpertsTable";
 import ExpertMarketTab from "./components/ExpertMarketTab";
 import BuiltinLibraryTab from "./components/BuiltinLibraryTab"; // fork: bundled templates
+import WorkBuddyExpertsTab from "../WorkBuddy/WorkBuddyExpertsTab"; // fork: WorkBuddy market
+import { useWbText } from "../WorkBuddy/wbText"; // fork
 import { OctopEmptyMascot } from "../../components/EmptyState";
 import { isOwnedExpert, ownedExperts } from "../../utils/sharedExpert";
 import {
@@ -75,11 +78,17 @@ import { apiErrorMessage } from "../../utils/apiError";
 import { navAllowed } from "../../utils/permissions";
 import styles from "./index.module.less";
 
-type TabKey = "my" | "teams" | "library" | "market"; // fork: + "library"
+type TabKey = "my" | "teams" | "library" | "market" | "workbuddy"; // fork: + "library", "workbuddy"
 
 function tabFromQuery(raw: string | null): TabKey | null {
-  if (raw === "my" || raw === "teams" || raw === "library" || raw === "market")
-    return raw; // fork: "library" is its own tab again
+  if (
+    raw === "my" ||
+    raw === "teams" ||
+    raw === "library" ||
+    raw === "market" ||
+    raw === "workbuddy"
+  )
+    return raw; // fork: "library" is its own tab again; + "workbuddy"
   if (raw === "managed") return "my";
   return null;
 }
@@ -356,6 +365,8 @@ export default function ExpertsPage() {
   );
 
   // ── Create-from-expert Drawer / Market create success ──────────
+  const [wbMcpServers, setWbMcpServers] = useState<string[]>([]); // fork
+  const { tx: wbTx } = useWbText(); // fork
   const [createSource, setCreateSource] =
     useState<CreateFromTemplateSource | null>(null);
 
@@ -852,6 +863,25 @@ export default function ExpertsPage() {
             ),
             children: marketContent,
           },
+          {
+            // fork: WorkBuddy expert market
+            key: "workbuddy",
+            label: (
+              <TabLabel icon={Briefcase}>
+                {wbTx("WorkBuddy 专家", "WorkBuddy Experts")}
+              </TabLabel>
+            ),
+            children: (
+              <WorkBuddyExpertsTab
+                lang={lang}
+                installedExpertIds={agentExpertIds}
+                onRequestCreate={(expert, mcpServers) => {
+                  setWbMcpServers(mcpServers);
+                  setCreateSource({ kind: "builtin", expert });
+                }}
+              />
+            ),
+          },
         ]}
       />
 
@@ -866,7 +896,11 @@ export default function ExpertsPage() {
         open={!!createSource}
         source={createSource}
         lang={lang}
-        onClose={() => setCreateSource(null)}
+        initialMcpServers={wbMcpServers} // fork: WorkBuddy expert MCP
+        onClose={() => {
+          setCreateSource(null);
+          setWbMcpServers([]); // fork
+        }}
         onCreated={handleCreated}
       />
 

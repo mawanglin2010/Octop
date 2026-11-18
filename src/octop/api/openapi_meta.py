@@ -158,6 +158,11 @@ OPENAPI_TAGS: list[dict[str, str]] = [
         "description": "Instance-global skill package catalog and package skill content.",
     },
     {"name": "skills", "description": "Per-agent skills and Skill Hub marketplace search."},
+    {  # fork
+        "name": "workbuddy",
+        "description": "Browse, preview and install entries from Tencent WorkBuddy's public "
+        "skill / expert / connector markets (fetched on demand, cached locally).",
+    },
     {
         "name": "subagents",
         "description": "Per-agent subagent definitions (agents/*.md) and bundled catalog install.",
