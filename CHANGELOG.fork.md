@@ -4,6 +4,16 @@
 
 版本号规则：`<官方版本>.postN`，例如基于官方 1.0.2b9 的第 1 个 fork 版本是 `1.0.2b9.post1`。打 `fork-v<版本号>` 标签（如 `fork-v1.0.2b9.post6`；不用 `v` 开头，以免触发官方发布流程）后，`.github/workflows/fork-release.yml` 会构建 wheel 和飞牛原生版 FPK，并发布到 GitHub Release；本文件中同名版本小节会作为 Release 说明。
 
+## [1.0.3b7.post2] - 2026-11-18
+
+### 新增
+- 接入腾讯 WorkBuddy 的公开市场（技能 / 专家 / 连接器）：内容在用时从腾讯公开 CDN 下载，缓存在 `~/.octop/workbuddy_market/`（每 6 小时检查更新，断网时沿用缓存），仓库和安装包里不带任何 WorkBuddy 内容；版权归原作者。
+  - **技能**：「个性化 → 技能」新增「WorkBuddy 技能」标签（未选专家时只能浏览），「技能包」页新增「WorkBuddy 技能」按钮。293 个技能可按 11 个分类筛选、搜索，预览简介、示例、文件列表和 `SKILL.md`，一键装进当前专家或技能包。说明里提到 WorkBuddy/CodeBuddy 的技能会提示可能依赖其专用工具。
+  - **专家**：「专家」页新增「WorkBuddy 专家」标签，376 个单人专家（不含专家团），预览提示词、技能、MCP 可用性和依赖的连接器；「用这个专家创建」会转成 Octop 专家模板 `wb-<名称>`，打开原有的新建抽屉，并把专家的公网 MCP 自动加进自定义连接器（同地址复用）后预先勾选。腾讯内网、stdio、SSE 方式的 MCP 只标注不可用。
+  - **连接器**（仅管理员）：「连接器」页新增「WorkBuddy 连接器」标签，641 个中 473 个可装（免配置 344、需 API Key 110、装后需授权 19），装成自定义 MCP `wb-<id>`，可共享给所有用户；需要 Key 的按 WorkBuddy 的表单填写，OAuth 类在「自定义」里完成授权。命令行工具型、stdio、SSE、凭证由 WorkBuddy 云端代管、内网的连接器会注明原因。
+  - 接口：`/api/workbuddy/skills`、`/experts`、`/connectors`（见 `/api/docs` 的 workbuddy 分组）；下载地址可用 `OCTOP_WORKBUDDY_SKILL_MARKET_URL`、`OCTOP_WORKBUDDY_EXPERT_MARKET_BASE`、`OCTOP_WORKBUDDY_CONNECTOR_MARKET_URL` 覆盖（仅 https）。
+- 飞牛商店版本 1.0.30702。
+
 ## [1.0.3b7.post1] - 2026-11-18
 
 ### 变更
