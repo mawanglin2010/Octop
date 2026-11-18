@@ -212,3 +212,151 @@ def fake_expert_market_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     experts.reset_cache_for_tests()
     yield tmp_path
     experts.reset_cache_for_tests()
+
+
+def _connector_plugin(name_zh: str, **ext: object) -> dict[str, object]:
+    display = {
+        "name": name_zh,
+        "name_zh": name_zh,
+        "name_en": f"{name_zh} EN",
+        "description_zh": f"{name_zh}的说明",
+        "description_en": "desc",
+        "examples_zh": ["问一下"],
+        "examples_en": ["ask"],
+    }
+    return {"extensions": {"ai.workbuddy": {"display": display, **ext}}}
+
+
+TOKEN_SCHEMA = {
+    "title": "连接",
+    "description": "填写 API Key",
+    "docUrl": "https://example.com/keys",
+    "fields": [
+        {"key": "API_KEY", "label": "API Key", "type": "password", "required": True},
+        {"key": "REGION", "label": "地区", "required": False},
+    ],
+}
+
+
+def build_connector_market_zip(path: Path) -> Path:
+    connectors: dict[str, dict[str, object]] = {
+        "keyed": {
+            "plugin": _connector_plugin(
+                "带密钥",
+                setup={
+                    "mcpServers": {
+                        "keyed": {
+                            "auth": {
+                                "type": "token",
+                                "schema": "./ai.workbuddy/token-schema.json",
+                                "headers": {
+                                    "Authorization": {"field": "API_KEY", "prefix": "Bearer "}
+                                },
+                            }
+                        }
+                    }
+                },
+            ),
+            "mcp": {
+                "mcpServers": {
+                    "keyed": {
+                        "type": "streamable-http",
+                        "url": "https://k.example.com/mcp",
+                        "headers": {"X-Region": "${REGION}"},
+                    }
+                }
+            },
+            "schema": TOKEN_SCHEMA,
+            "icon": True,
+        },
+        "templated": {
+            "plugin": _connector_plugin(
+                "模板",
+                urlTemplatedMcpServers={
+                    "tpl": {
+                        "type": "streamable-http",
+                        "urlTemplate": "https://t.example.com/mcp?ak=${API_KEY}",
+                        "tokenSchema": "./ai.workbuddy/token-schema.json",
+                    }
+                },
+            ),
+            "schema": TOKEN_SCHEMA,
+        },
+        "oauthy": {
+            "plugin": _connector_plugin("授权", auth={"mode": "oauth"}),
+            "mcp": {
+                "mcpServers": {
+                    "oauthy": {"type": "streamable-http", "url": "https://o.example.com/mcp"}
+                }
+            },
+        },
+        "open": {
+            "plugin": _connector_plugin("免配置"),
+            "mcp": {
+                "mcpServers": {
+                    "open": {"type": "streamableHttp", "url": "https://open.example.com/mcp"}
+                }
+            },
+        },
+        "proxied": {
+            "plugin": _connector_plugin("代管", auth={"mode": "server-side"}),
+            "mcp": {
+                "mcpServers": {"p": {"type": "streamable-http", "url": "https://p.example.com/mcp"}}
+            },
+        },
+        "clitool": {"plugin": _connector_plugin("命令行"), "cli": {"init": {}}},
+        "local": {
+            "plugin": _connector_plugin("本地"),
+            "mcp": {"mcpServers": {"l": {"command": "npx", "args": ["x"]}}},
+        },
+        "intra": {
+            "plugin": _connector_plugin("内网"),
+            "mcp": {
+                "mcpServers": {"i": {"type": "streamable-http", "url": "https://a.mcp.woa.com/mcp"}}
+            },
+        },
+    }
+    market = {
+        "name": "fake",
+        "plugins": [{"name": cid, "source": f"./connectors/{cid}"} for cid in connectors]
+        + [{"name": "../evil", "source": "./connectors/evil"}],
+    }
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(".codebuddy-plugin/marketplace.json", json.dumps(market, ensure_ascii=False))
+        for cid, spec in connectors.items():
+            base = f"connectors/{cid}/"
+            zf.writestr(
+                f"{base}.codebuddy-plugin/plugin.json",
+                json.dumps(spec["plugin"], ensure_ascii=False),
+            )
+            if "mcp" in spec:
+                zf.writestr(f"{base}mcp.json", json.dumps(spec["mcp"]))
+            if "schema" in spec:
+                zf.writestr(
+                    f"{base}ai.workbuddy/token-schema.json",
+                    json.dumps(spec["schema"], ensure_ascii=False),
+                )
+            if "cli" in spec:
+                zf.writestr(f"{base}ai.workbuddy/cli.json", json.dumps(spec["cli"]))
+            if spec.get("icon"):
+                zf.writestr(f"{base}ai.workbuddy/assets/icon.svg", "<svg/>")
+                zf.writestr(f"{base}skills/use-keyed/SKILL.md", "---\nname: use-keyed\n---\n")
+    return path
+
+
+@pytest.fixture(name="fake_connector_market")
+def fake_connector_market_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Path]:
+    """Point the WorkBuddy connector market at a local fake zip (no network)."""
+    from octop.infra.workbuddy import archive, connectors
+
+    zip_path = build_connector_market_zip(tmp_path / "connector-plugins.zip")
+
+    def fake_fetch(name: str, url: str, **_kw: object) -> archive.CachedFile:
+        return archive.CachedFile(zip_path, "conn-v1", 0.0)
+
+    monkeypatch.setattr(connectors, "fetch_cached", fake_fetch)
+    connectors.reset_cache_for_tests()
+    yield zip_path
+    connectors.reset_cache_for_tests()

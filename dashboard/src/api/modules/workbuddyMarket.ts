@@ -145,3 +145,73 @@ export const workbuddyExpertsApi = {
       { method: "POST", body: JSON.stringify({ add_mcp: addMcp }) },
     ),
 };
+
+// --- connectors (admin) ----------------------------------------------------
+
+export type WorkBuddyConnectorStatus =
+  | "supported"
+  | "cli"
+  | "stdio"
+  | "sse"
+  | "server_side"
+  | "internal"
+  | "no_mcp"
+  | "unsupported_auth";
+
+export interface WorkBuddyConnectorCard {
+  id: string;
+  name: WbText;
+  description: WbText;
+  examples: { zh?: string[]; en?: string[] };
+  status: WorkBuddyConnectorStatus;
+  auth: "none" | "token" | "oauth";
+  icon_url: string | null;
+  installed: boolean;
+}
+
+export interface WorkBuddyTokenField {
+  key: string;
+  label: WbText;
+  placeholder: WbText;
+  description: WbText;
+  secret: boolean;
+  required: boolean;
+}
+
+export interface WorkBuddyConnectorDetail extends WorkBuddyConnectorCard {
+  servers: { name: string; url: string }[];
+  fields: WorkBuddyTokenField[];
+  form: {
+    title?: WbText | null;
+    description?: WbText | null;
+    doc_url: string;
+    doc_label?: WbText | null;
+  };
+  skills: string[];
+}
+
+export const workbuddyConnectorsApi = {
+  list: (
+    params: { q?: string; supportedOnly?: boolean; refresh?: boolean } = {},
+    signal?: AbortSignal,
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.supportedOnly) qs.set("supported_only", "true");
+    if (params.refresh) qs.set("refresh", "true");
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<{ items: WorkBuddyConnectorCard[]; version: string }>(
+      `/workbuddy/connectors${suffix}`,
+      { signal },
+    );
+  },
+  get: (id: string) =>
+    request<WorkBuddyConnectorDetail>(
+      `/workbuddy/connectors/${encodeURIComponent(id)}`,
+    ),
+  install: (id: string, values: Record<string, string>, shared: boolean) =>
+    request<{ servers: string[]; auth: string }>(
+      `/workbuddy/connectors/${encodeURIComponent(id)}/install`,
+      { method: "POST", body: JSON.stringify({ values, shared }) },
+    ),
+};

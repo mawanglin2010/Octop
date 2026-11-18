@@ -15,7 +15,13 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from octop.api.deps import current_user, get_server, require_any_permission, require_permission
+from octop.api.deps import (
+    current_user,
+    get_server,
+    require_admin,
+    require_any_permission,
+    require_permission,
+)
 from octop.api.routers import connectors as connectors_router
 from octop.api.routers import skill_packages as skill_packages_router
 from octop.api.routers import skills as skills_router
@@ -25,6 +31,7 @@ from octop.infra.skills.install import SkillAlreadyExistsError, commit_skill_ins
 from octop.infra.skills.skill_packages import SkillPackageError, SkillPackageTooLarge
 from octop.infra.users.identity import User
 from octop.infra.utils.locale import resolve_request_locale
+from octop.infra.workbuddy import connectors as wb_connectors
 from octop.infra.workbuddy import experts as wb_experts
 from octop.infra.workbuddy import skills as wb_skills
 from octop.infra.workbuddy.archive import WorkBuddyFetchError
@@ -426,3 +433,203 @@ async def prepare_workbuddy_expert(
         "skipped_mcp": skipped,
         "connectors": bundle.connectors,
     }
+
+
+# --- connectors (admin) -------------------------------------------------------
+
+
+class WorkBuddyTokenField(BaseModel):
+    key: str
+    label: LocalizedText
+    placeholder: LocalizedText
+    description: LocalizedText
+    secret: bool
+    required: bool
+
+
+class WorkBuddyConnectorCard(BaseModel):
+    id: str
+    name: LocalizedText
+    description: LocalizedText
+    examples: dict[str, list[str]]
+    status: str = Field(
+        ...,
+        description="supported | cli | stdio | sse | server_side | internal | no_mcp | "
+        "unsupported_auth — only `supported` connectors can be installed.",
+    )
+    auth: str = Field(..., description="none | token (fill the form) | oauth (authorize later)")
+    icon_url: str | None
+    installed: bool = Field(..., description="A `wb-<id>` server exists in your custom MCP.")
+
+
+class WorkBuddyConnectorList(BaseModel):
+    items: list[WorkBuddyConnectorCard]
+    version: str
+
+
+class WorkBuddyConnectorServer(BaseModel):
+    name: str
+    url: str = Field(..., description="URL template; `${FIELD}` is filled from the form.")
+
+
+class WorkBuddyConnectorForm(BaseModel):
+    title: LocalizedText | None = None
+    description: LocalizedText | None = None
+    doc_url: str = ""
+    doc_label: LocalizedText | None = None
+
+
+class WorkBuddyConnectorDetail(WorkBuddyConnectorCard):
+    servers: list[WorkBuddyConnectorServer]
+    fields: list[WorkBuddyTokenField]
+    form: WorkBuddyConnectorForm
+    skills: list[str] = Field(..., description="Usage skills shipped with the connector.")
+
+
+class WorkBuddyConnectorInstallBody(BaseModel):
+    values: dict[str, str] = Field(default_factory=dict, description="Token form values.")
+    shared: bool = Field(False, description="Share the MCP server with all users.")
+
+
+class WorkBuddyConnectorInstallResult(BaseModel):
+    servers: list[str] = Field(..., description="Custom MCP server names written.")
+    auth: str
+
+
+def _connector_card(conn: wb_connectors.WorkBuddyConnector, installed: set[str]) -> dict[str, Any]:
+    return {
+        "id": conn.id,
+        "name": conn.name,
+        "description": conn.description,
+        "examples": conn.examples,
+        "status": conn.status,
+        "auth": conn.auth,
+        "icon_url": f"/api/workbuddy/connectors/{conn.id}/icon" if conn.icon_member else None,
+        "installed": conn.id in installed,
+    }
+
+
+def _connector_not_found(cid: str) -> OctopError:
+    return OctopError(ErrorCode.NOT_FOUND, f"WorkBuddy connector not found: {cid}")
+
+
+async def _installed_connectors(server: Any, user_id: int) -> set[str]:
+    svc = connectors_router._connector_service(server)
+    servers = await asyncio.to_thread(svc.get_custom_servers, user_id)
+    return wb_connectors.installed_ids(servers)
+
+
+@router.get(
+    "/connectors",
+    response_model=WorkBuddyConnectorList,
+    summary="List WorkBuddy market connectors (admin)",
+)
+async def list_workbuddy_connectors(
+    q: str = "",
+    supported_only: bool = False,
+    refresh: bool = False,
+    user: Any = Depends(require_admin()),
+    server: Any = Depends(get_server),
+) -> dict[str, Any]:
+    try:
+        items, version = await asyncio.to_thread(
+            wb_connectors.list_connectors, q, supported_only=supported_only, force=refresh
+        )
+    except (WorkBuddyFetchError, SkillPackageError, ValueError) as exc:
+        raise _market_error(exc) from exc
+    installed = await _installed_connectors(server, user.id)
+    return {"items": [_connector_card(c, installed) for c in items], "version": version}
+
+
+@router.get(
+    "/connectors/{cid}",
+    response_model=WorkBuddyConnectorDetail,
+    summary="Preview a WorkBuddy market connector (admin)",
+)
+async def get_workbuddy_connector(
+    cid: str,
+    user: Any = Depends(require_admin()),
+    server: Any = Depends(get_server),
+) -> dict[str, Any]:
+    try:
+        conn = await asyncio.to_thread(wb_connectors.get_connector, cid)
+    except wb_connectors.WorkBuddyConnectorNotFound as exc:
+        raise _connector_not_found(cid) from exc
+    except (WorkBuddyFetchError, SkillPackageError, ValueError) as exc:
+        raise _market_error(exc) from exc
+    installed = await _installed_connectors(server, user.id)
+    return {
+        **_connector_card(conn, installed),
+        "servers": [{"name": p.name, "url": p.url_template} for p in conn.servers],
+        "fields": [
+            {
+                "key": f.key,
+                "label": f.label,
+                "placeholder": f.placeholder,
+                "description": f.description,
+                "secret": f.secret,
+                "required": f.required,
+            }
+            for f in conn.fields
+        ],
+        "form": conn.form,
+        "skills": list(conn.skills),
+    }
+
+
+@router.get("/connectors/{cid}/icon", summary="WorkBuddy market connector icon (admin)")
+async def get_workbuddy_connector_icon(
+    cid: str,
+    _user: Any = Depends(require_admin()),
+) -> Response:
+    try:
+        data, media_type = await asyncio.to_thread(wb_connectors.connector_icon, cid)
+    except wb_connectors.WorkBuddyConnectorNotFound as exc:
+        raise _connector_not_found(cid) from exc
+    except (WorkBuddyFetchError, SkillPackageError) as exc:
+        raise _market_error(exc) from exc
+    headers = {"Cache-Control": "private, max-age=86400"}
+    if media_type == "image/svg+xml":
+        headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+    return Response(content=data, media_type=media_type, headers=headers)
+
+
+@router.post(
+    "/connectors/{cid}/install",
+    response_model=WorkBuddyConnectorInstallResult,
+    summary="Install a WorkBuddy connector as custom MCP (admin)",
+    description="Writes `wb-<id>` into the admin's custom MCP servers (reinstalling updates "
+    "the credentials). OAuth connectors are saved as 'authorize first'; finish the "
+    "authorization from the custom MCP page.",
+)
+async def install_workbuddy_connector(
+    cid: str,
+    body: WorkBuddyConnectorInstallBody,
+    user: Any = Depends(require_admin()),
+    server: Any = Depends(get_server),
+) -> dict[str, Any]:
+    from octop.infra.connectors.custom_mcp import CUSTOM_MCP_KIND  # noqa: PLC0415
+
+    try:
+        conn = await asyncio.to_thread(wb_connectors.get_connector, cid)
+    except wb_connectors.WorkBuddyConnectorNotFound as exc:
+        raise _connector_not_found(cid) from exc
+    except (WorkBuddyFetchError, SkillPackageError, ValueError) as exc:
+        raise _market_error(exc) from exc
+    svc = connectors_router._connector_service(server)
+    try:
+        names = await asyncio.to_thread(
+            wb_connectors.install, svc, user.id, conn, body.values, shared=body.shared
+        )
+    except wb_connectors.WorkBuddyConnectorInputError as exc:
+        raise OctopError(ErrorCode.SLASH_BAD_ARGS, str(exc)) from exc
+    except ValueError as exc:
+        raise OctopError(ErrorCode.CONNECTOR_INVALID_CREDENTIALS, str(exc)) from exc
+    server.services.audit_repo.write(
+        actor=user.username,
+        action="connector.custom_mcp.save",
+        target=CUSTOM_MCP_KIND,
+        payload=f"workbuddy:{cid}",
+    )
+    connectors_router._schedule_connector_reload(server, user.id, all_users=body.shared)
+    return {"servers": names, "auth": conn.auth}
