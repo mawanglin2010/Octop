@@ -37,6 +37,7 @@ import {
   RefreshCw,
   Signpost,
   Store,
+  Briefcase, // fork
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -79,6 +80,8 @@ import {
   type ZipImportSummary,
 } from "../Agent/Skills/components/SkillImportModal";
 import SkillHubTab from "../Agent/Skills/components/SkillHubTab";
+import WorkBuddySkillsTab from "../WorkBuddy/WorkBuddySkillsTab"; // fork
+import { useWbText } from "../WorkBuddy/wbText"; // fork
 import skillStyles from "../Agent/Skills/index.module.less";
 import type { ParsedZipSkill } from "../Agent/Skills/components/parseSkillZip";
 import { showConfirmModal } from "../../utils/confirmModal";
@@ -167,6 +170,8 @@ export default function SkillPackagesPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [hubOpen, setHubOpen] = useState(false);
+  const [wbOpen, setWbOpen] = useState(false); // fork: WorkBuddy skill market
+  const { tx: wbTx } = useWbText(); // fork
   const [skillsetHubOpen, setSkillsetHubOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
@@ -1046,6 +1051,15 @@ export default function SkillPackagesPage() {
                             <Store size={14} />
                             {t("skills.tencentSkillHub")}
                           </button>
+                          {/* fork: WorkBuddy skill market */}
+                          <button
+                            type="button"
+                            className={skillStyles.toolbarBtn}
+                            onClick={() => setWbOpen(true)}
+                          >
+                            <Briefcase size={14} />
+                            {wbTx("WorkBuddy 技能", "WorkBuddy Skills")}
+                          </button>
                           <button
                             type="button"
                             className={skillStyles.toolbarBtn}
@@ -1377,6 +1391,22 @@ export default function SkillPackagesPage() {
       >
         {selected ? (
           <SkillHubTab
+            target={{ type: "package", packageId: selected.id }}
+            onInstalled={() => void refreshSelected()}
+          />
+        ) : null}
+      </Drawer>
+
+      {/* fork: WorkBuddy skill market */}
+      <Drawer
+        title={wbTx("WorkBuddy 技能", "WorkBuddy Skills")}
+        open={wbOpen}
+        onClose={() => setWbOpen(false)}
+        width={860}
+        destroyOnHidden
+      >
+        {selected ? (
+          <WorkBuddySkillsTab
             target={{ type: "package", packageId: selected.id }}
             onInstalled={() => void refreshSelected()}
           />

@@ -225,6 +225,7 @@ def build_app(server: OctopServer) -> FastAPI:
         user_roles,
         users,
         voice,
+        workbuddy_market,  # fork: WorkBuddy market import
         workspace,
     )
     from octop.api.routers.decision import router as decision_router
@@ -307,6 +308,7 @@ def build_app(server: OctopServer) -> FastAPI:
             _RouterMount(usage.admin_router, "/api/admin", ["admin"]),
             _RouterMount(skill_packages.router, "/api", ["skill-packages"]),
             _RouterMount(skills.router, "/api", ["skills"]),
+            _RouterMount(workbuddy_market.router, "/api", ["workbuddy"]),  # fork
             _RouterMount(subagents.router, "/api", ["subagents"]),
             _RouterMount(terminal.router, "/api", ["terminal"]),
             _RouterMount(uploads.router, "/api", ["chat"]),

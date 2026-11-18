@@ -11,7 +11,7 @@
 
 import { useMemo, useState } from "react";
 import { Empty } from "antd";
-import { Blocks, Package, Sparkles, Store } from "lucide-react";
+import { Blocks, Briefcase, Package, Sparkles, Store } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import TabBar, {
   type TabBarItem,
@@ -19,12 +19,14 @@ import TabBar, {
 import InstalledSkillsTab from "./InstalledSkillsTab";
 import SkillPackagesTab from "./SkillPackagesTab";
 import SkillHubTab from "./SkillHubTab";
+import WorkBuddySkillsTab from "../../../WorkBuddy/WorkBuddySkillsTab"; // fork
+import { useWbText } from "../../../WorkBuddy/wbText"; // fork
 import { useSkills } from "../useSkills";
 import styles from "../index.module.less";
 import { useCurrentUser } from "../../../../hooks/useCurrentUser";
 import { userCan, userCanAny, PERM } from "../../../../utils/permissions";
 
-type SkillsTab = "custom" | "builtin" | "skillhub" | "packages";
+type SkillsTab = "custom" | "builtin" | "skillhub" | "workbuddy" | "packages"; // fork: + workbuddy
 
 const SKILL_TABS: TabBarItem<SkillsTab>[] = [
   { key: "custom", labelKey: "skills.customizedSkills", icon: Sparkles },
@@ -48,15 +50,29 @@ export default function SkillsTabs({ agentId }: SkillsTabsProps) {
   const canMarket = userCan(currentUser, "skill_market");
   const remoteAgent = Boolean(agentId?.startsWith("bridge:"));
   const [activeTab, setActiveTab] = useState<SkillsTab>("custom");
+  const { tx } = useWbText(); // fork
   const tabs = useMemo(
     () =>
-      SKILL_TABS.filter((tab) => {
+      // fork: WorkBuddy market tab after SkillHub (label is plain text).
+      SKILL_TABS.flatMap((tab) =>
+        tab.key === "skillhub"
+          ? [
+              tab,
+              {
+                key: "workbuddy" as const,
+                labelKey: tx("WorkBuddy 技能", "WorkBuddy Skills"),
+                icon: Briefcase,
+              },
+            ]
+          : [tab],
+      ).filter((tab) => {
         if (tab.key === "custom") return canCustom;
         if (tab.key === "builtin") return canBuiltin;
         if (tab.key === "skillhub") return canMarket;
+        if (tab.key === "workbuddy") return canMarket && !remoteAgent; // fork
         return canSkillPackages && !remoteAgent;
       }),
-    [canBuiltin, canCustom, canMarket, canSkillPackages, remoteAgent],
+    [canBuiltin, canCustom, canMarket, canSkillPackages, remoteAgent, tx],
   );
   const resolvedTab = tabs.some((tab) => tab.key === activeTab)
     ? activeTab
@@ -92,6 +108,12 @@ export default function SkillsTabs({ agentId }: SkillsTabsProps) {
           )
         ) : resolvedTab === "skillhub" && agentId ? (
           <SkillHubTab key={agentId} target={{ type: "agent", agentId }} />
+        ) : resolvedTab === "workbuddy" ? (
+          // fork: WorkBuddy skill market (read-only without an agent)
+          <WorkBuddySkillsTab
+            key={agentId ?? "none"}
+            target={agentId ? { type: "agent", agentId } : null}
+          />
         ) : resolvedTab === "packages" && agentId && canSkillPackages ? (
           <SkillPackagesTab
             key={agentId}
