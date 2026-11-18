@@ -69,6 +69,22 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: viteBase,
+    // fork: with the default root base, URLs that JS builds for chunks/assets
+    // follow the runtime base injected by the fnOS gateway
+    // (window.__OCTOP_BASE__, see src/octop/api/middleware/fnos_gateway.py);
+    // CSS references become file-relative. Without the global it is "/".
+    experimental: {
+      renderBuiltUrl(filename, { hostType }) {
+        if (viteBase !== "/") return undefined;
+        if (hostType === "js") {
+          return {
+            runtime: `(window.__OCTOP_BASE__||"/")+${JSON.stringify(filename)}`,
+          };
+        }
+        if (hostType === "css") return { relative: true };
+        return undefined;
+      },
+    },
     build: {
       outDir: path.resolve(__dirname, "../src/octop/dashboard"),
       emptyOutDir: true,

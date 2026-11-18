@@ -100,6 +100,12 @@ OCTOP_BIND_HOST="${OCTOP_BIND_HOST:-0.0.0.0}"
 
 mkdir -p "$OCTOP_HOME"
 
+# fork: 飞牛统一网关入口（桌面窗口走 /app/octop-native，自动跟随 http / https）。
+# 8089 端口照常开放；网关经应用目录下的 Unix socket 转发，见
+# src/octop/api/middleware/fnos_gateway.py。
+export OCTOP_GATEWAY_SOCKET="${OCTOP_GATEWAY_SOCKET:-${APPDEST}/gateway.sock}"
+export OCTOP_GATEWAY_PREFIX="${OCTOP_GATEWAY_PREFIX:-/app/octop-native}"
+
 octop_cmd() {
     "$PY" -m octop.cli.main "$@"
 }

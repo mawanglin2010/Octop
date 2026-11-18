@@ -286,7 +286,7 @@ export default function LoginPage() {
       if (event.data.access_token) {
         setAuthToken(event.data.access_token, event.data.remember ?? true);
       }
-      window.location.replace(event.data.redirect || "/chat");
+      window.location.replace(event.data.redirect || publicUrl("chat"));
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

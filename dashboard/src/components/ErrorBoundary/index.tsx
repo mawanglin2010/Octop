@@ -4,6 +4,7 @@ import {
   isChunkLoadError,
   tryReloadOnStaleChunk,
 } from "../../utils/reloadOnStaleChunk";
+import { publicUrl } from "../../utils/publicUrl";
 import ErrorFallback, { type ErrorFallbackAction } from "./ErrorFallback";
 
 interface Props {
@@ -56,7 +57,7 @@ export default class GlobalErrorBoundary extends Component<Props, State> {
   };
 
   handleHome = () => {
-    window.location.href = "/chat";
+    window.location.href = publicUrl("chat");
   };
 
   handleReload = () => {

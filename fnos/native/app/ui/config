@@ -4,9 +4,10 @@
             "title": "OCTOP",
             "icon": "images/icon_{0}.png",
             "type": "iframe",
-            "protocol": "http",
-            "port": "8089",
-            "url": "/",
+            "protocol": "",
+            "gatewayPrefix": "/app/octop-native",
+            "gatewaySocket": "gateway.sock",
+            "url": "/app/octop-native/",
             "allUsers": true,
             "control": {
                 "accessPerm": "readonly"

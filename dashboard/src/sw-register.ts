@@ -1,4 +1,4 @@
-import { publicUrl } from "./utils/publicUrl";
+import { hasRuntimeBase, publicUrl } from "./utils/publicUrl";
 
 /**
  * Service Worker registration and lifecycle management.
@@ -156,6 +156,9 @@ async function registerNotifySW(): Promise<void> {
 
 export async function registerSW(): Promise<void> {
   if (!("serviceWorker" in navigator)) return;
+  // fork: no service worker behind the fnOS gateway prefix; the precache and
+  // routes assume the app owns the origin root.
+  if (hasRuntimeBase()) return;
 
   if (import.meta.env.DEV) {
     try {
