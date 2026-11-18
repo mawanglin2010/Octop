@@ -4,6 +4,15 @@
 
 版本号规则：`<官方版本>.postN`，例如基于官方 1.0.2b9 的第 1 个 fork 版本是 `1.0.2b9.post1`。打 `fork-v<版本号>` 标签（如 `fork-v1.0.2b9.post6`；不用 `v` 开头，以免触发官方发布流程）后，`.github/workflows/fork-release.yml` 会构建 wheel 和飞牛原生版 FPK，并发布到 GitHub Release；本文件中同名版本小节会作为 Release 说明。
 
+## [1.0.3b7.post1] - 2026-11-18
+
+### 变更
+- 合并官方 develop 至 3d85f07e（官方 1.0.3b6、1.0.3b7，共 31 个提交）：新增托管专家（对话交给 OpenCode 等后端 Agent，可选会话模式，并能用连接器、知识库和插件）；Helm 集群部署、多实例共用 PostgreSQL；管理员可限制创建专家时能选的存储后端；本地模型供应商 Magpie；定时任务可跟随最新对话或固定到某场历史对话；对话里列出本轮改过的文件和增删行数；云服务器页地域按大区分组；带路径的 MCP OAuth 按 RFC 8414 发现授权信息；Telegram 回复本机器人时保留引用；PostgreSQL 清理孤儿 checkpoint 只统计不删除；安全方面，禁止把宿主机目录挂进 Docker 专家、腾讯云登录按用户隔离。运行库升级到 octop-harness 1.0.11、octop-memory 1.0.5、octop-gateway 1.0.4（官方去掉了临时指向 git 提交的 octop-gateway）。详见官方 `CHANGELOG.md`。
+- 合并冲突：专家页同时保留 fork 的「内置专家模板」标签和官方新增的 `?tab=managed` 跳转；官方 `CHANGELOG.md` 采用官方版本（fork 改动只记在本文件）。
+- 包含未单独发布的 post12：飞牛原生版窗口改走飞牛统一网关，用 https、域名或 FN Connect 打开飞牛时不再白屏（详见下方 post12）。
+- octop-harness 1.0.11 仍未包含 OpenAI / Gemini / 腾讯 TokenHub 生图适配器，fork 的 `media_fork` 继续保留。
+- 飞牛商店版本 1.0.30701。
+
 ## [1.0.3b5.post12] - 2026-11-18
 
 ### 修复
