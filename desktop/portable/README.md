@@ -89,11 +89,11 @@ OCTOP_GREEN_OFFLINE=1 bash desktop/portable/package.sh
 
 绿包脚本已做：
 
-1. `darwin-amd64` 覆盖钉死 `cryptography==46.0.3`（仍有 `macosx_*_universal2` wheel）
+1. `darwin-amd64` 覆盖钉死 `cryptography==46.0.3`（仍有 `macosx_*_universal2` wheel），并配套钉 `webauthn==2.8.0` / `pyopenssl==26.0.0` / `cbor2==5.9.0`（webauthn 3.x、pyOpenSSL 26.3 要求 cryptography>=49，否则启动时 MFA 导入 `mldsa` 失败；`windows-arm64` 同理）
 2. `uv --python-platform *-apple-darwin` 按 macOS 13.0 选 wheel。`onnxruntime` 1.28 只有 `macosx_14_0_arm64`，两个 macOS 都钉 `onnxruntime==1.23.2`（最后一版 `macosx_13_0` wheel，fastembed 0.9.1 允许）。Intel 的 `opencv-python` 5.x 是 `macosx_14_0_x86_64`，钉 `opencv-python==4.11.0.86`（`macosx_13_0_x86_64`，且接受锁定的 numpy 2.5）
 3. 全平台 `--only-binary cryptography`，禁止源码编译
 4. 打包后 `otool` 检查，拒绝 Homebrew/MacPorts 绝对路径
-5. smoke import 覆盖 `cryptography.fernet`
+5. smoke import 覆盖 `cryptography.fernet` 和 `octop.infra.auth.mfa`
 
 ### Windows / pywin32
 
