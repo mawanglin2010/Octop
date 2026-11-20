@@ -25,6 +25,8 @@ _SMOKE_IMPORTS = (
     "octop",
     "fastapi",
     "cryptography.fernet",
+    # Pulls in webauthn → cryptography mldsa; broke darwin-amd64 on cryptography 46.
+    "octop.infra.auth.mfa",
     "langchain_core",
     "langchain_openai",
 )

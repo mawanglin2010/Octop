@@ -271,6 +271,12 @@ write_green_overrides() {
         # 46.0.0 is the only release shipping a win_arm64 wheel; newer ones would
         # fall back to a Rust + OpenSSL source build that fails on the runner.
         echo "cryptography==46.0.0"
+        # webauthn 3.x / pyOpenSSL 26.3 require cryptography>=49 and import its
+        # mldsa module, so the 46.x pin above crashes `octop run` at MFA import.
+        # These are the newest releases that still accept cryptography 46.x.
+        echo "webauthn==2.8.0"
+        echo "pyopenssl==26.0.0"
+        echo "cbor2==5.9.0"
       } > "$out"
       echo "$out"
       ;;
@@ -287,6 +293,12 @@ write_green_overrides() {
         # 46.0.3 still publishes cp*-abi3-macosx_10_9_universal2 (covers x86_64).
         # cryptography>=47 only ships macos arm64 wheels → sdist + brew openssl.
         echo "cryptography==46.0.3"
+        # webauthn 3.x / pyOpenSSL 26.3 require cryptography>=49 and import its
+        # mldsa module, so the 46.x pin above crashes `octop run` at MFA import.
+        # These are the newest releases that still accept cryptography 46.x.
+        echo "webauthn==2.8.0"
+        echo "pyopenssl==26.0.0"
+        echo "cbor2==5.9.0"
         echo "onnxruntime==1.23.2"
         # 4.12 needs numpy<2.3, which fights the locked numpy 2.5. 4.13+ Intel
         # wheels are macosx_14. 4.11.0.86 still has macosx_13_0_x86_64 and

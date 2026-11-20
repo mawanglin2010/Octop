@@ -1,15 +1,17 @@
 #!/bin/bash
 # fork 自用：在 NAS 上的 Intel macOS 虚拟机（mac-build）里交叉打 darwin-arm64 桌面包（GitHub 的 macOS Apple 芯片机器排不上时用）。
-# 用法（在虚拟机里）：build_mac.sh <源码包.tar.gz> <完整版本> <基础版本>，例如 build_mac.sh ~/post1.tar.gz 1.0.3b5.post1 1.0.3b5
+# 用法（在虚拟机里）：build_mac.sh <源码包.tar.gz> <完整版本> <基础版本> [平台]，例如 build_mac.sh ~/post1.tar.gz 1.0.3b5.post1 1.0.3b5
+# 平台默认 darwin-arm64；传 darwin-amd64 则在这台 Intel 虚拟机上原生打 Intel 包。
 # 源码包 = `git archive --prefix=octop/ <标签>` 再追加本机构建好的 src/octop/dashboard（前端产物不在 git 里）。
 # 产物在 ~/out_<完整版本>/（dmg、zip、SHA256SUMS）；状态写 ~/status_<完整版本>（RUNNING / DONE / FAILED ...）。
 # 要点：用国内镜像（虚拟机直连 GitHub/npm 只有约 0.3 MB/s）；交叉组装只允许二进制轮子，所以把只有源码包的纯 Python 包
 # 先在本机构建成通用轮子（crcmod 强制走纯 Python 回退）；package.sh 的“修剪”一步会运行目标平台的 python，
 # 在 Intel 上跑不了，只在临时副本里改用本机 python。没有任何密码写在这里。
 # Build the darwin-arm64 desktop package on the Intel macOS VM (cross-assemble), mirroring fork-desktop.yml.
-# usage: build_mac.sh <tarball> <full-version> <base-version>
+# usage: build_mac.sh <tarball> <full-version> <base-version> [darwin-arm64|darwin-amd64]
 set -u
-TARBALL="$1"; VER="$2"; BASE="$3"; PLAT=darwin-arm64
+TARBALL="$1"; VER="$2"; BASE="$3"; PLAT="${4:-darwin-arm64}"
+case "$PLAT" in darwin-arm64) EB_ARCH=--arm64 ;; darwin-amd64) EB_ARCH=--x64 ;; *) echo "unsupported platform $PLAT" >&2; exit 2 ;; esac
 WORK="$HOME/work_${VER}"; OUT="$HOME/out_${VER}"
 export PATH="$HOME/.local/bin:$HOME/tools/node/bin:$PATH"
 # China mirrors (direct downloads from this VM are ~0.3 MB/s). Same files, same hashes.
@@ -122,11 +124,11 @@ retry 4 pnpm install --frozen-lockfile || fail "pnpm install"
 pnpm run typecheck || fail "typecheck"
 pnpm run test || fail "shell tests"
 
-log "electron-builder (mac arm64)"
+log "electron-builder ($PLAT)"
 export OCTOP_PLATFORM="$PLAT" OCTOP_VERSION="$BASE"
 export CSC_LINK="" CSC_KEY_PASSWORD="" WIN_CSC_LINK="" WIN_CSC_KEY_PASSWORD="" APPLE_ID="" APPLE_APP_SPECIFIC_PASSWORD="" APPLE_TEAM_ID=""
 pnpm run build || fail "pnpm build"
-retry 3 pnpm exec electron-builder --config electron-builder.config.ts --mac --arm64 --publish never || fail "electron-builder"
+retry 3 pnpm exec electron-builder --config electron-builder.config.ts --mac "$EB_ARCH" --publish never || fail "electron-builder"
 
 log "collect"
 rm -rf "$OUT"; mkdir -p "$OUT"
