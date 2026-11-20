@@ -104,7 +104,11 @@ if [ "$ARCH" = arm64 ]; then
 fi
 
 echo "[local-fpk] 安装依赖到 site-packages..."
-"${INSTALL[@]}" "$WHEEL"
+# Constrain to uv.lock so an upstream release (e.g. deepagents 0.7.41) cannot break the bundle.
+CONSTRAINTS="$SP.constraints.txt"
+uv export --project "$ROOT" --frozen --no-dev --no-emit-project --no-hashes -o "$CONSTRAINTS" >/dev/null
+"${INSTALL[@]}" -c "$CONSTRAINTS" "$WHEEL"
+rm -f "$CONSTRAINTS"
 rm -rf "$SP/mcp" "$SP"/mcp-*.dist-info \
        "$SP/langchain_mcp_adapters" "$SP"/langchain_mcp_adapters-*.dist-info
 "${INSTALL[@]}" --no-deps "mcp==1.28.1" "langchain-mcp-adapters==0.3.0"

@@ -236,8 +236,13 @@ jobs:
           mkdir -p "$SP"
           uname -m
           python3 -m pip install --quiet uv
+          # Constrain to uv.lock: an unpinned resolve once pulled deepagents 0.7.41, which
+          # dropped a module octop-harness still imports.
+          python3 -m uv export --frozen --no-dev --no-emit-project --no-hashes \
+            -o /tmp/octop-constraints.txt >/dev/null
           python3 -m uv pip install --python python3.12 \
-            --target "$SP" --no-cache "$(ls dist/octop-*.whl | head -1)"
+            --target "$SP" --no-cache -c /tmp/octop-constraints.txt \
+            "$(ls dist/octop-*.whl | head -1)"
           rm -rf "$SP/mcp" "$SP"/mcp-*.dist-info \
                  "$SP/langchain_mcp_adapters" "$SP"/langchain_mcp_adapters-*.dist-info
           mkdir -p /tmp/octop-pinned
