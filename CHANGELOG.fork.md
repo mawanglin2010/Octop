@@ -4,6 +4,12 @@
 
 版本号规则：`<官方版本>.postN`，例如基于官方 1.0.2b9 的第 1 个 fork 版本是 `1.0.2b9.post1`。打 `fork-v<版本号>` 标签（如 `fork-v1.0.2b9.post6`；不用 `v` 开头，以免触发官方发布流程）后，`.github/workflows/fork-release.yml` 会构建 wheel 和飞牛原生版 FPK，并发布到 GitHub Release；本文件中同名版本小节会作为 Release 说明。
 
+## [1.0.3b7.post3] - 2026-11-20
+
+### 修复
+- Intel 芯片 Mac（`darwin-amd64`）桌面版打不开：后台服务启动时报 `No module named 'cryptography.hazmat.primitives.asymmetric.mldsa'` 后退出。原因是 Intel Mac 包只能用 `cryptography` 46.x（更新的版本不再提供 Intel Mac 的 wheel），而官方加入的通行密钥登录依赖 `webauthn` 3.x、`pyOpenSSL` 26.3，它们要求 `cryptography` 49 以上。打包时为这类平台改用仍兼容 46.x 的 `webauthn` 2.8.0、`pyOpenSSL` 26.0.0、`cbor2` 5.9.0；同样只能用 `cryptography` 46.0.0 的 Windows ARM 包一并修正。打包后的导入检查新增 `octop.infra.auth.mfa`，以后同类问题会在打包阶段被拦住。
+- 飞牛商店版本 1.0.30703。
+
 ## [1.0.3b7.post2] - 2026-11-18
 
 ### 新增
